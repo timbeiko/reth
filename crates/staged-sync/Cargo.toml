@@ -25,6 +25,7 @@ reth-provider = { path = "../../crates/storage/provider", features = ["test-util
 reth-net-nat = { path = "../../crates/net/nat" }
 reth-interfaces = { path = "../interfaces", optional = true }
 reth-tasks = { path = "../../crates/tasks" }
+reth-stages = { path = "../../crates/stages" }
 
 # io
 serde = "1.0"

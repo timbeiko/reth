@@ -125,8 +125,8 @@ where
     fn log(
         &mut self,
         evm_data: &mut EVMData<'_, DB>,
-        address: &Address,
-        topics: &[H256],
+        address: &revm::primitives::Address,
+        topics: &[revm::primitives::B256],
         data: &Bytes,
     ) {
         call_inspectors!(inspector, [&mut self.custom_print_tracer], {
@@ -216,10 +216,10 @@ where
         data: &mut EVMData<'_, DB>,
         inputs: &CreateInputs,
         ret: InstructionResult,
-        address: Option<Address>,
+        address: Option<revm::primitives::Address>,
         remaining_gas: Gas,
         out: Bytes,
-    ) -> (InstructionResult, Option<Address>, Gas, Bytes) {
+    ) -> (InstructionResult, Option<revm::primitives::Address>, Gas, Bytes) {
         call_inspectors!(inspector, [&mut self.custom_print_tracer], {
             let (new_ret, new_address, new_gas, new_retdata) =
                 inspector.create_end(data, inputs, ret, address, remaining_gas, out.clone());

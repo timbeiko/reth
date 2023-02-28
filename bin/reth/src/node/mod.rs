@@ -448,10 +448,10 @@ impl Command {
                     .set(SenderRecoveryStage {
                         commit_threshold: stage_conf.sender_recovery.commit_threshold,
                     })
-                    .set(ExecutionStage {
-                        chain_spec: self.chain.clone(),
-                        commit_threshold: stage_conf.execution.commit_threshold,
-                    }),
+                    .set(ExecutionStage::new(
+                        self.chain.clone(),
+                        stage_conf.execution.commit_threshold,
+                    )),
             )
             .build();
 

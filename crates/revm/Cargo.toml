@@ -13,4 +13,7 @@ reth-interfaces = { path = "../interfaces" }
 reth-provider = { path = "../storage/provider" }
 reth-revm-primitives = { path = "./revm-primitives" }
 
+# misc
+schnellru = "0.2.1"
+
 revm = { version = "3.0.0"}

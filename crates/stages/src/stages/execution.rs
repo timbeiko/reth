@@ -8,13 +8,19 @@ use reth_db::{
     models::TransitionIdAddress,
     tables,
     transaction::{DbTx, DbTxMut},
+    Bytecode,
 };
 use reth_executor::execution_result::AccountChangeSet;
 use reth_interfaces::provider::ProviderError;
 use reth_primitives::{Address, Block, ChainSpec, Hardfork, StorageEntry, H256, MAINNET, U256};
 use reth_provider::{LatestStateProviderRef, Transaction};
 use reth_revm::database::{State, SubState};
-use std::fmt::Debug;
+use schnellru::{ByLength, LruMap};
+use std::{
+    collections::BTreeMap,
+    fmt::{Debug, Formatter},
+    sync::{Arc, RwLock},
+};
 use tracing::*;
 
 /// The [`StageId`] of the execution stage.
@@ -48,17 +54,27 @@ pub const EXECUTION: StageId = StageId("Execution");
 /// - [tables::AccountHistory] to remove change set and apply old values to
 /// - [tables::PlainAccountState] [tables::StorageHistory] to remove change set and apply old values
 /// to [tables::PlainStorageState]
-#[derive(Debug)]
 pub struct ExecutionStage {
     /// Executor configuration.
-    pub chain_spec: ChainSpec,
+    chain_spec: ChainSpec,
     /// Commit threshold
-    pub commit_threshold: u64,
+    commit_threshold: u64,
+    lru: Arc<RwLock<LruMap<H256, reth_revm::Bytecode>>>,
+}
+
+impl Debug for ExecutionStage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExecutionStage").finish()
+    }
 }
 
 impl Default for ExecutionStage {
     fn default() -> Self {
-        Self { chain_spec: MAINNET.clone(), commit_threshold: 1_000 }
+        Self {
+            chain_spec: MAINNET.clone(),
+            commit_threshold: 1_000,
+            lru: Arc::new(RwLock::new(LruMap::new(ByLength::new(1024)))),
+        }
     }
 }
 
@@ -106,7 +122,10 @@ impl ExecutionStage {
             .collect::<Result<Vec<_>, _>>()?;
 
         // Create state provider with cached state
-        let mut state_provider = SubState::new(State::new(LatestStateProviderRef::new(&**tx)));
+        let mut state_provider = SubState::new(State::new_with_lru(
+            LatestStateProviderRef::new(&**tx),
+            Arc::clone(&self.lru),
+        ));
 
         // Fetch transactions, execute them and generate results
         let mut block_change_patches = Vec::with_capacity(block_batch.len());
@@ -159,6 +178,17 @@ impl ExecutionStage {
         info!(target: "sync::stages::execution", current_transition_id, blocks = block_change_patches.len(), "Inserting execution results");
 
         // apply changes to plain database.
+        // insert PlainAccountState (it is sorted) -> requires transition id A
+        // insert AccountChangeSet (sort keys first) -> requires transition id A
+        // insert StorageChangeSet (sort keys first) -> requires transition id A
+        // insert PlainAccountState (for blocks, it is sorted) -> requires transition id A + n_tx
+        // insert AccountChangeSet (sort keys first) -> requires transition id A + n_tx
+        // insert bytecodes (sort keys first)
+        let mut plain_accounts = BTreeMap::new();
+        let mut account_changesets = BTreeMap::new();
+        //let mut plain_storage = BTreeMap::new();
+        let mut storage_changesets = BTreeMap::new();
+        let mut bytecodes = BTreeMap::new();
         for (results, block_number) in block_change_patches.into_iter() {
             let spurious_dragon_active =
                 self.chain_spec.fork(Hardfork::SpuriousDragon).active_at_block(block_number);
@@ -169,12 +199,13 @@ impl ExecutionStage {
                     // apply account change to db. Updates AccountChangeSet and PlainAccountState
                     // tables.
                     trace!(target: "sync::stages::execution", ?address, current_transition_id, ?account, wipe_storage, "Applying account changeset");
-                    account.apply_to_db(
-                        &**tx,
+                    account.apply_to_colls(
+                        &mut account_changesets,
+                        &mut plain_accounts,
                         address,
                         current_transition_id,
                         spurious_dragon_active,
-                    )?;
+                    );
 
                     let storage_id = TransitionIdAddress((current_transition_id, address));
 
@@ -188,10 +219,6 @@ impl ExecutionStage {
                         })
                         .collect::<Vec<_>>();
 
-                    let mut cursor_storage_changeset =
-                        tx.cursor_write::<tables::StorageChangeSet>()?;
-                    cursor_storage_changeset.seek_exact(storage_id)?;
-
                     if wipe_storage {
                         // iterate over storage and save them before entry is deleted.
                         tx.cursor_read::<tables::PlainStorageState>()?
@@ -201,7 +228,8 @@ impl ExecutionStage {
                             })
                             .try_for_each(|entry| {
                                 let (_, old_value) = entry?;
-                                cursor_storage_changeset.append(storage_id, old_value)
+                                storage_changesets.insert((storage_id, old_value.key), old_value);
+                                Ok::<(), reth_interfaces::db::Error>(())
                             })?;
 
                         // delete all entries
@@ -222,10 +250,11 @@ impl ExecutionStage {
                         for (key, old_value, new_value) in storage {
                             let old_entry = StorageEntry { key, value: old_value };
                             let new_entry = StorageEntry { key, value: new_value };
-                            // insert into StorageChangeSet
-                            cursor_storage_changeset.append(storage_id, old_entry)?;
+                            storage_changesets.insert((storage_id, key), old_entry);
 
                             // Always delete old value as duplicate table, put will not override it
+                            // todo: investigate mdbx_replace with MDBX_CURRENT + MDBX_NOOVERWRITE
+                            // or mdbx_cursor_put with MDBX_CURRENT https://erthink.github.io/libmdbx/group__c__crud.html#gaad688c4b0fbbcff676f181dc0437befa
                             tx.delete::<tables::PlainStorageState>(address, Some(old_entry))?;
                             if new_value != U256::ZERO {
                                 tx.put::<tables::PlainStorageState>(address, new_entry)?;
@@ -239,7 +268,7 @@ impl ExecutionStage {
                     // be packed). Currently save only raw bytes.
                     let bytecode = bytecode.bytes();
                     trace!(target: "sync::stages::execution", ?hash, ?bytecode, len = bytecode.len(), "Inserting bytecode");
-                    tx.put::<tables::Bytecodes>(hash, bytecode[..bytecode.len()].to_vec())?;
+                    bytecodes.insert(hash, bytecode[..bytecode.len()].to_vec());
 
                     // NOTE: bytecode bytes are not inserted in change set and can be found in
                     // separate table
@@ -250,14 +279,40 @@ impl ExecutionStage {
             // If there are any post block changes, we will add account changesets to db.
             for (address, changeset) in results.block_changesets.into_iter() {
                 trace!(target: "sync::stages::execution", ?address, current_transition_id, "Applying block reward");
-                changeset.apply_to_db(
-                    &**tx,
+                changeset.apply_to_colls(
+                    &mut account_changesets,
+                    &mut plain_accounts,
                     address,
                     current_transition_id,
                     spurious_dragon_active,
-                )?;
+                );
             }
+            // todo: will this not skip too far after the merge?
             current_transition_id += 1;
+        }
+
+        for (address, account) in plain_accounts {
+            match account {
+                Some(acc) => {
+                    tx.put::<tables::PlainAccountState>(address, acc)?;
+                }
+                None => {
+                    tx.delete::<tables::PlainAccountState>(address, None)?;
+                }
+            }
+        }
+
+        for ((transition, _), change) in account_changesets {
+            tx.put::<tables::AccountChangeSet>(transition, change)?;
+        }
+
+        let mut cursor_storage_changeset = tx.cursor_write::<tables::StorageChangeSet>()?;
+        for ((storage_id, _), entry) in storage_changesets {
+            cursor_storage_changeset.append(storage_id, entry)?;
+        }
+
+        for (hash, bytecode) in bytecodes {
+            tx.put::<tables::Bytecodes>(hash, bytecode)?;
         }
 
         let done = !capped;
@@ -269,7 +324,7 @@ impl ExecutionStage {
 impl ExecutionStage {
     /// Create new execution stage with specified config.
     pub fn new(chain_spec: ChainSpec, commit_threshold: u64) -> Self {
-        Self { chain_spec, commit_threshold }
+        Self { chain_spec, commit_threshold, ..Default::default() }
     }
 }
 

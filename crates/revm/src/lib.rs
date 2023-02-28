@@ -12,3 +12,4 @@ pub mod database;
 
 /// reexport for convenience
 pub use reth_revm_primitives::*;
+pub use revm::primitives::Bytecode;

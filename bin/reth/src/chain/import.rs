@@ -156,10 +156,10 @@ impl ImportCommand {
                 .set(SenderRecoveryStage {
                     commit_threshold: config.stages.sender_recovery.commit_threshold,
                 })
-                .set(ExecutionStage {
-                    chain_spec: self.chain.clone(),
-                    commit_threshold: config.stages.execution.commit_threshold,
-                }),
+                .set(ExecutionStage::new(
+                    self.chain.clone(),
+                    config.stages.execution.commit_threshold,
+                )),
             )
             .with_max_block(0)
             .build();

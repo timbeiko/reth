@@ -460,6 +460,7 @@ checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
 dependencies = [
  "funty",
  "radium 0.7.0",
+ "serde",
  "tap",
  "wyz",
 ]
@@ -4855,6 +4856,7 @@ dependencies = [
  "reth-provider",
  "reth-revm-primitives",
  "revm",
+ "schnellru",
 ]
 
 [[package]]
@@ -5083,6 +5085,7 @@ dependencies = [
  "reth-revm",
  "reth-rlp",
  "reth-staged-sync",
+ "schnellru",
  "serde",
  "tempfile",
  "thiserror",
@@ -5141,7 +5144,7 @@ dependencies = [
 [[package]]
 name = "revm"
 version = "3.0.0"
-source = "git+https://github.com/bluealloy/revm#4d2f0741c5f9daec0ceb7cc7733d65ea4c496170"
+source = "git+https://github.com/onbjerg/revm?branch=onbjerg/remove-gas-blocks#6bfbbc640b3f2efd5ddd57d1f8a59731d1ccb9c3"
 dependencies = [
  "auto_impl 1.0.1",
  "revm-interpreter",
@@ -5151,8 +5154,9 @@ dependencies = [
 [[package]]
 name = "revm-interpreter"
 version = "1.0.0"
-source = "git+https://github.com/bluealloy/revm#4d2f0741c5f9daec0ceb7cc7733d65ea4c496170"
+source = "git+https://github.com/onbjerg/revm?branch=onbjerg/remove-gas-blocks#6bfbbc640b3f2efd5ddd57d1f8a59731d1ccb9c3"
 dependencies = [
+ "bitvec 1.0.1",
  "derive_more",
  "enumn",
  "revm-primitives",
@@ -5162,7 +5166,7 @@ dependencies = [
 [[package]]
 name = "revm-precompile"
 version = "2.0.0"
-source = "git+https://github.com/bluealloy/revm#4d2f0741c5f9daec0ceb7cc7733d65ea4c496170"
+source = "git+https://github.com/onbjerg/revm?branch=onbjerg/remove-gas-blocks#6bfbbc640b3f2efd5ddd57d1f8a59731d1ccb9c3"
 dependencies = [
  "k256",
  "num",
@@ -5178,10 +5182,11 @@ dependencies = [
 [[package]]
 name = "revm-primitives"
 version = "1.0.0"
-source = "git+https://github.com/bluealloy/revm#4d2f0741c5f9daec0ceb7cc7733d65ea4c496170"
+source = "git+https://github.com/onbjerg/revm?branch=onbjerg/remove-gas-blocks#6bfbbc640b3f2efd5ddd57d1f8a59731d1ccb9c3"
 dependencies = [
  "arbitrary",
  "auto_impl 1.0.1",
+ "bitvec 1.0.1",
  "bytes",
  "derive_more",
  "enumn",
@@ -5431,6 +5436,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "713cfb06c7059f3588fb8044c0fad1d09e3c01d225e25b9220dbfdcf16dbb1b3"
 dependencies = [
  "windows-sys 0.42.0",
+]
+
+[[package]]
+name = "schnellru"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "772575a524feeb803e5b0fcbc6dd9f367e579488197c94c6e4023aad2305774d"
+dependencies = [
+ "ahash 0.8.3",
+ "cfg-if",
+ "hashbrown 0.13.2",
 ]
 
 [[package]]

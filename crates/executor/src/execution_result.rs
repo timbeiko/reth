@@ -98,6 +98,43 @@ impl AccountInfoChangeSet {
         }
         Ok(())
     }
+
+    pub fn apply_to_colls(
+        self,
+        account_changeset: &mut BTreeMap<(u64, Address), AccountBeforeTx>,
+        plain_accounts: &mut BTreeMap<Address, Option<Account>>,
+        address: Address,
+        tx_index: u64,
+        has_state_clear_eip: bool,
+    ) {
+        match self {
+            AccountInfoChangeSet::Changed { old, new } => {
+                // insert old account in AccountChangeSet
+                // check for old != new was already done
+                account_changeset
+                    .insert((tx_index, address), AccountBeforeTx { address, info: Some(old) });
+                plain_accounts.insert(address, Some(new));
+            }
+            AccountInfoChangeSet::Created { new } => {
+                // Ignore account that are created empty and state clear (SpuriousDragon) hardfork
+                // is activated.
+                if has_state_clear_eip && new.is_empty() {
+                    return
+                }
+                account_changeset
+                    .insert((tx_index, address), AccountBeforeTx { address, info: None });
+                plain_accounts.insert(address, Some(new));
+            }
+            AccountInfoChangeSet::Destroyed { old } => {
+                account_changeset
+                    .insert((tx_index, address), AccountBeforeTx { address, info: Some(old) });
+                plain_accounts.insert(address, None);
+            }
+            AccountInfoChangeSet::NoChange => {
+                // do nothing storage account didn't change
+            }
+        }
+    }
 }
 
 /// Diff change set that is needed for creating history index and updating current world state.

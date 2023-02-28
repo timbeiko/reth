@@ -171,8 +171,7 @@ impl Command {
                 stage.execute(&mut tx, input).await?;
             }
             StageEnum::Execution => {
-                let mut stage =
-                    ExecutionStage { chain_spec: self.chain.clone(), commit_threshold: num_blocks };
+                let mut stage = ExecutionStage::new(self.chain.clone(), num_blocks);
                 if !self.skip_unwind {
                     stage.unwind(&mut tx, unwind).await?;
                 }

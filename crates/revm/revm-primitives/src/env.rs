@@ -43,10 +43,10 @@ pub fn fill_cfg_env(
 /// Fill block environment from Block.
 pub fn fill_block_env(block_env: &mut BlockEnv, header: &Header, after_merge: bool) {
     block_env.number = U256::from(header.number);
-    block_env.coinbase = header.beneficiary;
+    block_env.coinbase = revm::primitives::bits::B160(header.beneficiary.to_fixed_bytes());
     block_env.timestamp = U256::from(header.timestamp);
     if after_merge {
-        block_env.prevrandao = Some(header.mix_hash);
+        block_env.prevrandao = Some(revm::primitives::bits::B256(header.mix_hash.to_fixed_bytes()));
         block_env.difficulty = U256::ZERO;
     } else {
         block_env.difficulty = header.difficulty;

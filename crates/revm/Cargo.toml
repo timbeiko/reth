@@ -13,5 +13,10 @@ reth-interfaces = { path = "../interfaces" }
 reth-provider = { path = "../storage/provider" }
 reth-revm-primitives = { path = "./revm-primitives" }
 reth-revm-inspectors = { path = "./revm-inspectors" }
+reth-rpc-types = { path = "../rpc/rpc-types", optional = true }
 
 revm = { version = "3.0.0" }
+
+[features]
+# provides helpers commonly used in rpc
+rpc = ["reth-rpc-types"]

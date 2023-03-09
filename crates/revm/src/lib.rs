@@ -17,3 +17,7 @@ pub use reth_revm_primitives::*;
 
 /// Re-export everything
 pub use revm;
+
+/// Contains helpers commonly used in RPC, like `eth_` namespace
+#[cfg(feature = "rpc")]
+pub mod rpc;

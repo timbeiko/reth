@@ -48,7 +48,7 @@ const MAXIMUM_TIMEOUT: Duration = INITIAL_REQUEST_TIMEOUT;
 /// How much the new measurements affect the current timeout (X percent)
 const SAMPLE_IMPACT: f64 = 0.1;
 /// Amount of RTTs before timeout
-const TIMEOUT_SCALING: u32 = 3;
+const TIMEOUT_SCALING: u32 = 6;
 
 /// The type that advances an established session by listening for incoming messages (from local
 /// node or read from connection) and emitting events back to the
@@ -432,6 +432,7 @@ impl ActiveSession {
 
         let current = Duration::from_millis(self.internal_request_timeout.load(Ordering::Relaxed));
         let request_timeout = calculate_new_timeout(current, elapsed);
+        trace!(target: "net::session", current_timeout=?current, ?elapsed, new_timeout=?request_timeout, "updating request timeout");
         self.internal_request_timeout.store(request_timeout.as_millis() as u64, Ordering::Relaxed);
         self.internal_request_timeout_interval = tokio::time::interval(request_timeout);
     }

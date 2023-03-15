@@ -405,7 +405,7 @@ impl Command {
         Ok(self.fetch_tip(db, fetch_client, BlockHashOrNumber::Hash(tip)).await?.number)
     }
 
-    /// Attempt to look up the block with the given number and return the header.
+    /// Attempt to look up the block with the given hash or number and return the header.
     ///
     /// NOTE: The download is attempted with infinite retries.
     async fn fetch_tip(
@@ -416,7 +416,6 @@ impl Command {
     ) -> Result<SealedHeader, reth_interfaces::Error> {
         let tip_num = match tip {
             BlockHashOrNumber::Hash(hash) => {
-                info!(target: "reth::cli", ?hash, "Fetching tip block from the network.");
                 db.view(|tx| tx.get::<tables::HeaderNumbers>(hash))??.unwrap()
             }
             BlockHashOrNumber::Number(number) => number,

@@ -34,8 +34,8 @@ impl Default for DnsDiscoveryConfig {
     fn default() -> Self {
         Self {
             lookup_timeout: Duration::from_secs(5),
-            max_requests_per_sec: NonZeroUsize::new(3).unwrap(),
-            recheck_interval: Duration::from_secs(60 * 30),
+            max_requests_per_sec: NonZeroUsize::new(16).unwrap(),
+            recheck_interval: Duration::from_secs(30),
             dns_record_cache_limit: NonZeroU32::new(1_000).unwrap(),
             bootstrap_dns_networks: Some(Default::default()),
         }

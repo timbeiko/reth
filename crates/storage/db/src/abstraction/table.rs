@@ -114,6 +114,7 @@ pub trait TableImporter<'tx>: for<'a> DbTxMut<'a> {
         };
         for row in source_range? {
             let (key, value) = row?;
+            dbg!("OK");
             destination_cursor.append(key, value)?;
         }
 

@@ -23,7 +23,11 @@ pub(crate) struct SequentialPairStream<Key: Ord, Value, St> {
 
 // === impl SequentialPairStream ===
 
-impl<Key: Ord, Value, St> SequentialPairStream<Key, Value, St> {
+impl<Err, Key: Ord, Value, St> SequentialPairStream<Key, Value, St>
+where
+    Key: Ord + Copy,
+    St: Stream<Item = Result<(Key, Value), Err>>,
+{
     /// Returns a new [SequentialPairStream] that emits the items of the given stream in order
     /// starting at the given start point.
     pub(crate) fn new(start: Key, stream: St) -> Self {
@@ -34,7 +38,7 @@ impl<Key: Ord, Value, St> SequentialPairStream<Key, Value, St> {
 /// implements Stream for any underlying Stream that returns a result
 impl<Key, Value, St, Err> Stream for SequentialPairStream<Key, Value, St>
 where
-    Key: Ord + Copy + Add<Output = Key> + One,
+    Key: Ord + Copy,
     St: Stream<Item = Result<(Key, Value), Err>>,
 {
     type Item = Result<(Key, Value), Err>;
@@ -52,7 +56,7 @@ where
                     }
                     Ordering::Equal => {
                         let next = PeekMut::pop(maybe_next);
-                        *this.next = *this.next + Key::one();
+                        // *this.next = *this.next + Key::one();
                         return Poll::Ready(Some(Ok(next.into())))
                     }
                     Ordering::Greater => {
@@ -75,7 +79,7 @@ where
                     Poll::Ready(item) => match item {
                         Some(Ok((k, v))) => {
                             if k == *this.next {
-                                *this.next = *this.next + Key::one();
+                                // *this.next = *this.next + Key::one();
                                 return Poll::Ready(Some(Ok((k, v))))
                             }
                             this.pending.push(OrderedItem(k, v));

@@ -222,11 +222,19 @@ impl<DB: Database> Stage<DB> for AccountHashingStage {
                 // drop the sender to signal that we're done sending
                 drop(sender);
 
-                let mut hashed_accounts = UnboundedReceiverStream::new(rx);
+                // We sort everything inside the batch to minimize the number of cursor seeks
+                let mut hashed_accounts = super::stream::SequentialPairStream::new(
+                    keccak256(start_address.unwrap_or_default()),
+                    UnboundedReceiverStream::new(rx),
+                );
                 let mut hashed_account_cursor = tx.cursor_write::<tables::HashedAccount>()?;
                 while let Some(account) = hashed_accounts.next().await {
                     let (k, v) = account?;
-                    hashed_account_cursor.insert(k, v)?;
+                    if start_address.is_none() {
+                        hashed_account_cursor.append(k, v)?;
+                    } else {
+                        hashed_account_cursor.insert(k, v)?;
+                    }
                 }
 
                 // next key of iterator

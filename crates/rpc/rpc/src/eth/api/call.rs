@@ -30,6 +30,7 @@ use revm::{
     },
     Database,
 };
+use tracing::trace;
 
 // Gas per transaction not creating a contract.
 const MIN_TRANSACTION_GAS: u64 = 21_000u64;
@@ -70,10 +71,12 @@ where
         // we want to disable this in eth_call, since this is common practice used by other node
         // impls and providers <https://github.com/foundry-rs/foundry/issues/4388>
         cfg.disable_block_gas_limit = true;
+        trace!(target: "rpc::eth::call", request=?request, "Starting eth_call");
 
         let request_gas = request.gas;
 
         let mut env = build_call_evm_env(cfg, block, request)?;
+        trace!(target: "rpc::eth::call", ?env, "Build evm env for call");
 
         let mut db = SubState::new(State::new(state));
 
@@ -83,10 +86,13 @@ where
         }
 
         if request_gas.is_none() && env.tx.gas_price > U256::ZERO {
+            trace!(target: "rpc::eth::call", "No gas limit was provided in the request, so we need to cap the request's gas limit");
             // no gas limit was provided in the request, so we need to cap the request's gas limit
             cap_tx_gas_limit_with_caller_allowance(&mut db, &mut env.tx)?;
+            trace!(target: "rpc::eth::call", tx_env=?env.tx, "Capped tx gas limit");
         }
 
+        trace!(target: "rpc::eth::call", "Executing the transaction");
         transact(&mut db, env)
     }
 

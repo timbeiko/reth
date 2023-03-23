@@ -8,6 +8,7 @@ use revm::{
     primitives::{BlockEnv, CfgEnv, Env, ResultAndState, SpecId, TransactTo, TxEnv},
     Database, Inspector,
 };
+use tracing::trace;
 
 /// Returns the addresses of the precompiles corresponding to the SpecId.
 pub(crate) fn get_precompiles(spec_id: &SpecId) -> Vec<reth_primitives::H160> {
@@ -127,15 +128,20 @@ where
     EthApiError: From<<DB as Database>::Error>,
 {
     let mut allowance = db.basic(env.caller)?.map(|acc| acc.balance).unwrap_or_default();
+    trace!(target: "rpc::evm", ?allowance, "Got caller allowance");
 
     // subtract transferred value
     allowance = allowance
         .checked_sub(env.value)
         .ok_or_else(|| InvalidTransactionError::InsufficientFunds)?;
 
+    trace!(target: "rpc::evm", ?allowance, "Subtracted env value from allowance");
+
     // cap the gas limit
+    trace!(target: "rpc::evm", ?allowance, gas_price=?env.gas_price, "Capping the gas limit");
     if let Ok(gas_limit) = allowance.checked_div(env.gas_price).unwrap_or_default().try_into() {
         env.gas_limit = gas_limit;
+        trace!(target: "rpc::evm", gas_limit=?env.gas_limit, "Capped the gas limit based on the gas price");
     }
 
     Ok(())

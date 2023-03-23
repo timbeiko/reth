@@ -24,6 +24,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
 };
+use tracing::trace;
 
 /// Main block executor
 pub struct Executor<DB>
@@ -397,8 +398,13 @@ where
                     block_available_gas,
                 })
             }
+
+            trace!(target: "executor", ?transaction, ?sender, "Executing transaction");
+
             // Execute transaction.
             let ResultAndState { result, state } = self.transact(transaction, sender)?;
+
+            trace!(target: "executor", ?result, ?state, "Transaction executed successfully");
 
             // commit changes
             self.commit_changes(

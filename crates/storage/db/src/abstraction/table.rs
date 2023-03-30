@@ -61,9 +61,12 @@ impl<T> Value for T where T: Compress + Decompress + Serialize {}
 pub trait Table: Send + Sync + Debug + 'static {
     /// Return table name as it is present inside the MDBX.
     const NAME: &'static str;
+    /// Const boolean marker that indicates whether the table is dup sort or not.
+    const IS_DUP_SORT: bool;
     /// Key element of `Table`.
     ///
     /// Sorting should be taken into account when encoding this.
+    
     type Key: Key;
     /// Value element of `Table`.
     type Value: Value;

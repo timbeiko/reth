@@ -1,10 +1,12 @@
 use crate::{
     common::{Bounds, Sealed},
-    table::TableImporter,
-    transaction::{DbTx, DbTxMut},
+    implementation::mdbx::test_utils::create_test_rw_db,
+    table::{Table, TableImporter},
+    tables,
+    transaction::{DbTx, DbTxGAT, DbTxMut},
     Error,
 };
-use std::sync::Arc;
+use std::{cell::Cell, sync::Arc};
 
 /// Implements the GAT method from:
 /// <https://sabrinajewson.org/blog/the-better-alternative-to-lifetime-gats#the-better-gats>.
@@ -83,5 +85,105 @@ impl<DB: Database> Database for &DB {
 
     fn tx_mut(&self) -> Result<<Self as DatabaseGAT<'_>>::TXMut, Error> {
         <DB as Database>::tx_mut(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use reth_primitives::H256;
+
+    use crate::cursor::DbCursorRO;
+
+    use super::*;
+
+    pub type CursorT<'a, TX: DbTx<'a>, T: Table> =
+        <TX as DbTxGAT<'a>>::Cursor<T>;
+
+    pub struct DatabaseGATWrapper<'a, TX: DbTx<'a>> {
+        tx: TX,
+        c1_taken: Cell<bool>,
+        c2_taken: Cell<bool>,
+        c1: Cell<Option<Box<CursorT<'a, TX, tables::CanonicalHeaders>>>>,
+        c2: Cell<Option<Box<CursorT<'a, TX, tables::HeaderNumbers>>>>,
+    }
+
+    pub enum CursorState<'a, TX: DbTx<'a>, T: Table> {
+        Taken,
+        Free(Box<CursorT<'a, TX, T>>),
+        NotInitialized,
+    }
+
+    impl<'a, TX: DbTx<'a>> DatabaseGATWrapper<'a, TX> {
+        pub fn first<'b>(&'b self) -> DropVar<'b, 'a, TX, tables::CanonicalHeaders> {
+            if self.c1_taken.get() == true {
+                panic!("Cursor 1 is already taken");
+            }
+            self.c1_taken.set(true);
+            let cursor = self.c1.take();
+            DropVar { drop_flag: &self.c1_taken, cursor_cell: &self.c1,cursor  }
+        }
+
+        pub fn second<'b>(&'b self) -> DropVar<'b, 'a, TX, tables::HeaderNumbers> {
+            if self.c2_taken.get() == true {
+                panic!("Cursor 1 is already taken");
+            }
+            self.c2_taken.set(true);
+            let cursor = self.c2.take();
+            DropVar { drop_flag: &self.c2_taken, cursor_cell: &self.c2, cursor}
+        }
+    }
+
+    pub struct DropVar<'a, 'b, TX: DbTx<'b>, T: Table> {
+        drop_flag: &'a Cell<bool>,
+        cursor_cell: &'a Cell<Option<Box<CursorT<'b, TX, T>>>>,
+        cursor: Option<Box<CursorT<'b, TX, T>>>,
+    }
+
+    impl<'a, 'b, TX: DbTx<'b>, T: Table> Drop for DropVar<'a, 'b, TX, T> {
+        fn drop(&mut self) {
+            self.cursor_cell.set(self.cursor.take());
+            self.drop_flag.set(false);
+        }
+    }
+
+    #[test]
+    pub fn temp() {
+        let db = create_test_rw_db();
+        db.update(|tx| {
+            tx.put::<tables::CanonicalHeaders>(1, [0x11; 32].into())?;
+            tx.put::<tables::CanonicalHeaders>(2, [0x22; 32].into())?;
+            tx.put::<tables::HeaderNumbers>([0x33; 32].into(), 1)?;
+            tx.put::<tables::HeaderNumbers>([0x44; 32].into(), 1)
+        })
+        .unwrap()
+        .unwrap();
+
+        let tx = db.tx().unwrap();
+        let c1 = Cell::new(Some(Box::new(tx.cursor_read::<tables::CanonicalHeaders>().unwrap())));
+        let c2 = Cell::new(Some(Box::new(tx.cursor_read::<tables::HeaderNumbers>().unwrap())));
+
+        let mut wrap = DatabaseGATWrapper {
+            //db: &db,
+            tx,
+            c1_taken: Cell::new(false),
+            c2_taken: Cell::new(false),
+            c1,
+            c2,
+        };
+        let mut first = wrap.first();
+        let mut second = wrap.second();
+
+        println!("{:?}",first.cursor.as_mut().unwrap().seek(1).unwrap());
+        println!("{:?}",second.cursor.as_mut().unwrap().seek(H256([0x33;32])).unwrap());
+
+        drop(first);
+        let mut first = wrap.first();
+        println!("{:?}",first.cursor.as_mut().unwrap().seek(1).unwrap());
+        //let second = wrap.second();
+        // panics
+        //let first = wrap.first();
+
+        drop(first);
     }
 }

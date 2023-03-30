@@ -11,9 +11,9 @@ use crate::{
 /// Sealed trait which cannot be implemented by 3rd parties, exposed only for implementers
 pub trait DbTxGAT<'a, __ImplicitBounds: Sealed = Bounds<&'a Self>>: Send + Sync {
     /// Cursor GAT
-    type Cursor<T: Table>: DbCursorRO<'a, T> + Send + Sync;
+    type Cursor<T: Table>: DbCursorRO<'a, T>;
     /// DupCursor GAT
-    type DupCursor<T: DupSort>: DbDupCursorRO<'a, T> + DbCursorRO<'a, T> + Send + Sync;
+    type DupCursor<T: DupSort>: DbDupCursorRO<'a, T>;
 }
 
 /// Implements the GAT method from:
@@ -22,14 +22,9 @@ pub trait DbTxGAT<'a, __ImplicitBounds: Sealed = Bounds<&'a Self>>: Send + Sync 
 /// Sealed trait which cannot be implemented by 3rd parties, exposed only for implementers
 pub trait DbTxMutGAT<'a, __ImplicitBounds: Sealed = Bounds<&'a Self>>: Send + Sync {
     /// Cursor GAT
-    type CursorMut<T: Table>: DbCursorRW<'a, T> + DbCursorRO<'a, T> + Send + Sync;
+    type CursorMut<T: Table>: DbCursorRW<'a, T>;
     /// DupCursor GAT
-    type DupCursorMut<T: DupSort>: DbDupCursorRW<'a, T>
-        + DbCursorRW<'a, T>
-        + DbDupCursorRO<'a, T>
-        + DbCursorRO<'a, T>
-        + Send
-        + Sync;
+    type DupCursorMut<T: DupSort>: DbDupCursorRW<'a, T>;
 }
 
 /// Read only transaction

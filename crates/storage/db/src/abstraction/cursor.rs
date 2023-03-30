@@ -10,7 +10,7 @@ use crate::{
 };
 
 /// A read-only cursor over table `T`.
-pub trait DbCursorRO<'tx, T: Table> {
+pub trait DbCursorRO<'tx, T: Table>: Send + Sync {
     /// Positions the cursor at the first entry in the table, returning it.
     fn first(&mut self) -> PairResult<T>;
 
@@ -65,7 +65,7 @@ pub trait DbCursorRO<'tx, T: Table> {
 }
 
 /// A read-only cursor over the dup table `T`.
-pub trait DbDupCursorRO<'tx, T: DupSort> {
+pub trait DbDupCursorRO<'tx, T: DupSort>: DbCursorRO<'tx, T> + Send + Sync {
     /// Positions the cursor at the next KV pair of the table, returning it.
     fn next_dup(&mut self) -> PairResult<T>;
 
@@ -104,7 +104,7 @@ pub trait DbDupCursorRO<'tx, T: DupSort> {
 }
 
 /// Read write cursor over table.
-pub trait DbCursorRW<'tx, T: Table> {
+pub trait DbCursorRW<'tx, T: Table>: DbCursorRO<'tx, T> + Send + Sync {
     /// Database operation that will update an existing row if a specified value already
     /// exists in a table, and insert a new row if the specified value doesn't already exist
     fn upsert(&mut self, key: T::Key, value: T::Value) -> Result<(), Error>;
@@ -124,7 +124,9 @@ pub trait DbCursorRW<'tx, T: Table> {
 }
 
 /// Read Write Cursor over DupSorted table.
-pub trait DbDupCursorRW<'tx, T: DupSort> {
+pub trait DbDupCursorRW<'tx, T: DupSort>:
+    DbCursorRW<'tx, T> + DbDupCursorRO<'tx, T> + Send + Sync
+{
     /// Delete all duplicate entries for current key.
     fn delete_current_duplicates(&mut self) -> Result<(), Error>;
 
@@ -155,7 +157,7 @@ impl<'cursor, 'tx, T: Table, CURSOR: DbCursorRO<'tx, T>> std::iter::Iterator
     fn next(&mut self) -> Option<Self::Item> {
         let start = self.start.take();
         if start.is_some() {
-            return start
+            return start;
         }
 
         self.cursor.next().transpose()
@@ -225,7 +227,7 @@ impl<'cursor, 'tx, T: Table, CURSOR: DbCursorRO<'tx, T>> std::iter::Iterator
     fn next(&mut self) -> Option<Self::Item> {
         let start = self.start.take();
         if start.is_some() {
-            return start
+            return start;
         }
 
         self.cursor.prev().transpose()
@@ -255,12 +257,12 @@ impl<'cursor, 'tx, T: Table, CURSOR: DbCursorRO<'tx, T>> std::iter::Iterator
     type Item = Result<(T::Key, T::Value), Error>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_done {
-            return None
+            return None;
         }
 
         let start = self.start.take();
         if start.is_some() && matches!(self.start_key, Bound::Included(_) | Bound::Unbounded) {
-            return start
+            return start;
         }
 
         match self.cursor.next().transpose() {
@@ -341,7 +343,7 @@ impl<'cursor, 'tx, T: DupSort, CURSOR: DbDupCursorRO<'tx, T>> std::iter::Iterato
     fn next(&mut self) -> Option<Self::Item> {
         let start = self.start.take();
         if start.is_some() {
-            return start
+            return start;
         }
         self.cursor.next_dup().transpose()
     }

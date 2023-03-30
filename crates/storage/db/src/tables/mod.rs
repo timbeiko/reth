@@ -78,6 +78,12 @@ pub const TABLES: [(TableType, &str); 27] = [
 /// Macro to declare key value table.
 macro_rules! table {
     ($(#[$docs:meta])+ ( $table_name:ident ) $key:ty | $value:ty) => {
+               table!(
+    $(#[$docs])+
+    ( $table_name ) $key | $value | false
+);
+    };
+    ($(#[$docs:meta])+ ( $table_name:ident ) $key:ty | $value:ty | $is_dub_sort:expr) => {
         $(#[$docs])+
         ///
         #[doc = concat!("Takes [`", stringify!($key), "`] as a key and returns [`", stringify!($value), "`]")]
@@ -86,6 +92,7 @@ macro_rules! table {
 
         impl $crate::table::Table for $table_name {
             const NAME: &'static str = $table_name::const_name();
+            const IS_DUP_SORT: bool = $is_dub_sort;
             type Key = $key;
             type Value = $value;
         }
@@ -113,7 +120,8 @@ macro_rules! dupsort {
             $(#[$docs])+
             ///
             #[doc = concat!("`DUPSORT` table with subkey being: [`", stringify!($subkey), "`].")]
-            ( $table_name ) $key | $value
+            ( $table_name ) $key | $value |
+            true
         );
         impl DupSort for $table_name {
             type SubKey = $subkey;

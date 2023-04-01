@@ -69,6 +69,8 @@ pub struct Discv4Config {
     /// If configured and a `external_ip_resolver` is configured, try to resolve the external ip
     /// using this interval.
     pub resolve_external_ip_interval: Option<Duration>,
+    /// bootnode checking interval.
+    pub bootnode_check_interval: Option<Duration>,
 }
 
 impl Discv4Config {
@@ -140,6 +142,8 @@ impl Default for Discv4Config {
             external_ip_resolver: Some(Default::default()),
             /// By default retry public IP using a 5min interval
             resolve_external_ip_interval: Some(Duration::from_secs(60 * 5)),
+            /// By default re-ping bootnodes every 5 minutes
+            bootnode_check_interval: Some(Duration::from_secs(10)),
         }
     }
 }

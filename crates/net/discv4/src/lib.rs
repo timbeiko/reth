@@ -468,6 +468,18 @@ impl Discv4Service {
             builder.build(&secret_key).expect("v4 is set; qed")
         };
 
+        // set bootnode interval
+        let metrics = config
+            .bootnode_check_interval
+            .map(|interval| {
+                // bootnodes will be pinged on startup, so we wait for the first tick
+                Discv4Metrics::from_interval(tokio::time::interval_at(
+                    tokio::time::Instant::now() + interval,
+                    interval,
+                ))
+            })
+            .unwrap_or_default();
+
         Discv4Service {
             local_address,
             local_eip_868_enr,
@@ -491,7 +503,7 @@ impl Discv4Service {
             resolve_external_ip_interval: config.resolve_external_ip_interval(),
             config,
             queued_events: Default::default(),
-            metrics: Default::default(),
+            metrics,
         }
     }
 
@@ -564,9 +576,6 @@ impl Discv4Service {
             let key = kad_key(record.id);
             let entry = NodeEntry::new(record);
 
-            // register the boot node in metrics if it is not already registered
-            self.metrics.register_bootnode(record);
-
             // insert the boot node in the table
             match self.kbuckets.insert_or_update(
                 &key,
@@ -578,6 +587,8 @@ impl Discv4Service {
             ) {
                 InsertResult::Failed(_) => {}
                 _ => {
+                    // register the boot node in metrics if it is not already registered
+                    self.metrics.register_bootnode(record);
                     self.try_ping(record, PingReason::Initial);
                 }
             }
@@ -991,6 +1002,7 @@ impl Discv4Service {
         }
 
         if self.pending_pings.len() < MAX_NODES_PING {
+            self.metrics.bootnode_ping_sent(node);
             self.send_ping(node, reason);
         } else {
             self.queued_pings.push_back((node, reason));
@@ -1431,6 +1443,14 @@ impl Discv4Service {
             // re-ping some peers
             if self.ping_interval.poll_tick(cx).is_ready() {
                 self.re_ping_oldest();
+            }
+
+            // if needed for metrics, re-ping bootnodes
+            if let Poll::Ready(true) = self.metrics.poll(cx) {
+                for record in self.config.bootstrap_nodes.clone() {
+                    debug!(target : "discv4",  ?record, "re-pinging boot node");
+                    self.try_ping(record, PingReason::RePing);
+                }
             }
 
             if let Some(Poll::Ready(Some(ip))) =

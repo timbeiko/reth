@@ -65,6 +65,9 @@ pub use config::{Discv4Config, Discv4ConfigBuilder};
 mod node;
 use node::{kad_key, NodeKey};
 
+mod bootnode_metrics;
+use bootnode_metrics::Discv4Metrics;
+
 // reexport NodeRecord primitive
 pub use reth_primitives::NodeRecord;
 
@@ -393,6 +396,8 @@ pub struct Discv4Service {
     config: Discv4Config,
     /// Buffered events populated during poll.
     queued_events: VecDeque<Discv4Event>,
+    /// Metrics for the discv4 service
+    metrics: Discv4Metrics,
 }
 
 impl Discv4Service {
@@ -486,6 +491,7 @@ impl Discv4Service {
             resolve_external_ip_interval: config.resolve_external_ip_interval(),
             config,
             queued_events: Default::default(),
+            metrics: Default::default(),
         }
     }
 
@@ -557,6 +563,9 @@ impl Discv4Service {
             debug!(target : "discv4",  ?record, "pinging boot node");
             let key = kad_key(record.id);
             let entry = NodeEntry::new(record);
+
+            // register the boot node in metrics if it is not already registered
+            self.metrics.register_bootnode(record);
 
             // insert the boot node in the table
             match self.kbuckets.insert_or_update(
@@ -811,6 +820,11 @@ impl Discv4Service {
             }
             _ => {}
         };
+
+        // report response if this is a bootnode
+        if self.config.bootstrap_nodes.contains(&record) {
+            self.metrics.bootnode_responded_to_ping(record);
+        }
     }
 
     /// Adds all nodes
@@ -1268,6 +1282,8 @@ impl Discv4Service {
 
         // remove nodes that failed to pong
         for node_id in failed_pings {
+            // update metrics when evicting the bootnodes, they will be added again
+            self.metrics.bootnode_missed_pong_peer_id(node_id);
             self.remove_node(node_id);
         }
 

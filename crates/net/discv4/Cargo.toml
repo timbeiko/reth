@@ -17,6 +17,10 @@ reth-rlp-derive = { path = "../../rlp/rlp-derive" }
 reth-net-common = { path = "../common" }
 reth-net-nat = { path = "../nat" }
 
+# metrics
+metrics = "0.20.1"
+reth-metrics-derive = { path = "../../metrics/metrics-derive" }
+
 # ethereum
 discv5 = { git = "https://github.com/sigp/discv5" }
 secp256k1 = { version = "0.26.0", features = [

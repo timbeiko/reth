@@ -39,6 +39,8 @@ pub enum CheckOnline {
 /// A non-zero number of missed pongs, but low number of sent pings sent may indicate that
 /// bootstrapping the network has succeeded through some other method that did not involve the
 /// bootnodes.
+///
+/// A zero value of missed pongs indicates that the bootnode responded to the latest ping.
 #[derive(Metrics)]
 #[metrics(scope = "discv4")]
 pub struct BootnodeMetrics {

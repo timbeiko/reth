@@ -4,7 +4,7 @@ use std::str::FromStr;
 use crate::{
     chain, db,
     dirs::{LogsDir, PlatformPath},
-    drop_stage, dump_stage, node, p2p,
+    discovery, drop_stage, dump_stage, node, p2p,
     runner::CliRunner,
     stage, test_eth_chain, test_vectors,
 };
@@ -26,6 +26,7 @@ pub fn run() -> eyre::Result<()> {
 
     match opt.command {
         Commands::Node(command) => runner.run_command_until_exit(|ctx| command.execute(ctx)),
+        Commands::Discovery(command) => runner.run_command_until_exit(|ctx| command.execute(ctx)),
         Commands::Init(command) => runner.run_until_ctrl_c(command.execute()),
         Commands::Import(command) => runner.run_until_ctrl_c(command.execute()),
         Commands::Db(command) => runner.run_until_ctrl_c(command.execute()),
@@ -70,6 +71,9 @@ pub enum Commands {
     /// P2P Debugging utilities
     #[command(name = "p2p")]
     P2P(p2p::Command),
+    /// Discovery debugging utilities
+    #[command(name = "discovery")]
+    Discovery(discovery::Command),
     /// Run Ethereum blockchain tests
     #[command(name = "test-chain")]
     TestEthChain(test_eth_chain::Command),

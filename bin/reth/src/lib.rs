@@ -12,6 +12,7 @@ pub mod chain;
 pub mod cli;
 pub mod db;
 pub mod dirs;
+pub mod discovery;
 pub mod drop_stage;
 pub mod dump_stage;
 pub mod node;

@@ -99,6 +99,10 @@ pub struct DiscoveryArgs {
     /// The UDP port to use for P2P discovery/networking. default: 30303
     #[arg(long = "discovery.port", name = "discovery.port", value_name = "DISCOVERY_PORT")]
     pub port: Option<u16>,
+
+    /// Check bootnodes on an interval in seconds.
+    #[arg(long)]
+    pub check_bootnodes: Option<u64>,
 }
 
 impl DiscoveryArgs {

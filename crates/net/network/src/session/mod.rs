@@ -46,7 +46,7 @@ use tracing::{instrument, trace};
 mod active;
 mod config;
 mod handle;
-pub use config::SessionsConfig;
+pub use config::{SessionLimits, SessionsConfig};
 
 /// Internal identifier for active sessions.
 #[derive(Debug, Clone, Copy, PartialOrd, PartialEq, Eq, Hash)]
@@ -232,6 +232,10 @@ impl SessionManager {
 
     /// Starts a new pending session from the local node to the given remote node.
     pub(crate) fn dial_outbound(&mut self, remote_addr: SocketAddr, remote_peer_id: PeerId) {
+        if self.counter.ensure_pending_outbound().is_err() {
+            return
+        }
+
         let session_id = self.next_id();
         let (disconnect_tx, disconnect_rx) = oneshot::channel();
         let pending_events = self.pending_sessions_tx.clone();

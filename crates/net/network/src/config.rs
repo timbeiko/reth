@@ -16,6 +16,7 @@ use std::{
     collections::HashSet,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     sync::Arc,
+    time::Duration,
 };
 
 /// reexports for convenience
@@ -149,6 +150,8 @@ pub struct NetworkConfigBuilder {
     hello_message: Option<HelloMessage>,
     /// Head used to start set for the fork filter and status.
     head: Option<Head>,
+    /// Whether or not to check if bootnodes are up.
+    check_bootnodes: Option<u64>,
 }
 
 // === impl NetworkConfigBuilder ===
@@ -170,6 +173,7 @@ impl NetworkConfigBuilder {
             executor: None,
             hello_message: None,
             head: None,
+            check_bootnodes: None,
         }
     }
 
@@ -295,6 +299,12 @@ impl NetworkConfigBuilder {
         self
     }
 
+    /// Check bootnodes for a certain number of seconds.
+    pub fn check_bootnodes(mut self, seconds: u64) -> Self {
+        self.check_bootnodes = Some(seconds);
+        self
+    }
+
     /// Consumes the type and creates the actual [`NetworkConfig`]
     /// for the given client type that can interact with the chain.
     pub fn build<C>(self, client: C) -> NetworkConfig<C> {
@@ -302,7 +312,7 @@ impl NetworkConfigBuilder {
         let Self {
             secret_key,
             mut dns_discovery_config,
-            discovery_v4_builder,
+            mut discovery_v4_builder,
             boot_nodes,
             discovery_addr,
             listener_addr,
@@ -313,6 +323,7 @@ impl NetworkConfigBuilder {
             executor,
             hello_message,
             head,
+            check_bootnodes,
         } = self;
 
         let listener_addr = listener_addr.unwrap_or_else(|| {
@@ -322,6 +333,12 @@ impl NetworkConfigBuilder {
         let mut hello_message =
             hello_message.unwrap_or_else(|| HelloMessage::builder(peer_id).build());
         hello_message.port = listener_addr.port();
+
+        if let Some(dur) = check_bootnodes {
+            if let Some(builder) = discovery_v4_builder.as_mut() {
+                builder.bootnode_check_interval(Some(Duration::from_secs(dur)));
+            }
+        }
 
         let head = head.unwrap_or(Head {
             hash: chain_spec.genesis_hash(),

@@ -77,10 +77,14 @@ impl SessionsConfig {
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SessionLimits {
-    max_pending_inbound: Option<u32>,
-    max_pending_outbound: Option<u32>,
-    max_established_inbound: Option<u32>,
-    max_established_outbound: Option<u32>,
+    /// Maximum number of pending inbound sessions.
+    pub max_pending_inbound: Option<u32>,
+    /// Maximum number of pending outbound sessions.
+    pub max_pending_outbound: Option<u32>,
+    /// Maximum number of active inbound sessions.
+    pub max_established_inbound: Option<u32>,
+    /// Maximum number of active outbound sessions.
+    pub max_established_outbound: Option<u32>,
 }
 
 impl SessionLimits {

@@ -142,8 +142,8 @@ impl Default for Discv4Config {
             external_ip_resolver: Some(Default::default()),
             /// By default retry public IP using a 5min interval
             resolve_external_ip_interval: Some(Duration::from_secs(60 * 5)),
-            /// By default re-ping bootnodes every 5 minutes
-            bootnode_check_interval: Some(Duration::from_secs(10)),
+            /// By default do not re-ping bootnodes every 5 minutes
+            bootnode_check_interval: None,
         }
     }
 }
@@ -300,6 +300,12 @@ impl Discv4ConfigBuilder {
         resolve_external_ip_interval: Option<Duration>,
     ) -> &mut Self {
         self.config.resolve_external_ip_interval = resolve_external_ip_interval;
+        self
+    }
+
+    /// Sets the bootnode check interval.
+    pub fn bootnode_check_interval(&mut self, interval: Option<Duration>) -> &mut Self {
+        self.config.bootnode_check_interval = interval;
         self
     }
 

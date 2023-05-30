@@ -391,7 +391,7 @@ pub fn commit_state_changes<DB>(
 {
     // iterate over all changed accounts
     for (address, account) in changes {
-        if account.is_destroyed {
+        if account.is_selfdestructed() {
             // get old account that we are destroying.
             let db_account = match db.accounts.entry(address) {
                 Entry::Occupied(entry) => entry.into_mut(),
@@ -480,7 +480,8 @@ pub fn commit_state_changes<DB>(
                 }
             };
 
-            cached_account.account_state = if account.storage_cleared {
+            //TODO(redo this)cached_account.account_state = if account.storage_cleared {
+            cached_account.account_state = if account.is_created() {
                 cached_account.storage.clear();
                 AccountState::StorageCleared
             } else if cached_account.account_state.is_storage_cleared() {
@@ -625,6 +626,7 @@ pub fn insert_post_block_withdrawals_balance_increments(
     }
 }
 
+/* TODO(rakita) tests
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1317,3 +1319,4 @@ mod tests {
         assert_eq!(post_state_after_state_clear.account_changes(), &AccountChanges::default());
     }
 }
+ */

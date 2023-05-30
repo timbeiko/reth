@@ -65,7 +65,10 @@ incremental = false
 [patch.crates-io]
 # patched for quantity U256 responses <https://github.com/recmo/uint/issues/224>
 ruint = { git = "https://github.com/paradigmxyz/uint" }
-
+revm = { path = "../revm/crates/revm" }
+revm-primitives = { path = "../revm/crates/primitives" }
+revm-precompile = { path = "../revm/crates/precompile" }
+revm-interpreter = { path = "../revm/crates/interpreter" }
 
 [workspace.dependencies]
 tracing = "^0.1.0"

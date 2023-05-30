@@ -50,7 +50,7 @@ impl<DB: StateProvider> DatabaseRef for State<DB> {
         let bytecode = self.0.bytecode_by_hash(code_hash)?;
 
         if let Some(bytecode) = bytecode {
-            Ok(bytecode.with_code_hash(code_hash).0)
+            Ok(bytecode.0)
         } else {
             Ok(Bytecode::new())
         }

@@ -63,15 +63,9 @@ impl Bytecode {
     }
 
     /// Create new bytecode from raw bytes and its hash.
-    pub fn new_raw_with_hash(bytes: Bytes, code_hash: H256) -> Self {
-        let revm_bytecode = unsafe { RevmBytecode::new_raw_with_hash(bytes, code_hash) };
+    pub fn new_raw_with_hash(bytes: Bytes) -> Self {
+        let revm_bytecode = unsafe { RevmBytecode::new_raw_with_hash(bytes) };
         Self(revm_bytecode)
-    }
-
-    /// Set the hash of the inner bytecode.
-    pub fn with_code_hash(mut self, code_hash: H256) -> Self {
-        self.0.hash = code_hash;
-        self
     }
 }
 
@@ -124,12 +118,10 @@ impl Compact for Bytecode {
                 RevmBytecode::new_checked(
                     bytes,
                     buf.read_u64::<BigEndian>().unwrap() as usize,
-                    None,
                 )
             }),
             2 => Bytecode(RevmBytecode {
                 bytecode: bytes,
-                hash: KECCAK_EMPTY,
                 state: BytecodeState::Analysed {
                     len: buf.read_u64::<BigEndian>().unwrap() as usize,
                     jump_map: JumpMap::from_slice(buf),

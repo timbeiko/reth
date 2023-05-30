@@ -253,19 +253,17 @@ where
         &mut self,
         interp: &mut Interpreter,
         data: &mut EVMData<'_, DB>,
-        is_static: bool,
     ) -> InstructionResult {
-        self.gas_inspector.initialize_interp(interp, data, is_static)
+        self.gas_inspector.initialize_interp(interp, data)
     }
 
     fn step(
         &mut self,
         interp: &mut Interpreter,
         data: &mut EVMData<'_, DB>,
-        is_static: bool,
     ) -> InstructionResult {
         if self.config.record_steps {
-            self.gas_inspector.step(interp, data, is_static);
+            self.gas_inspector.step(interp, data);
             self.start_step(interp, data);
         }
 
@@ -291,11 +289,10 @@ where
         &mut self,
         interp: &mut Interpreter,
         data: &mut EVMData<'_, DB>,
-        is_static: bool,
         eval: InstructionResult,
     ) -> InstructionResult {
         if self.config.record_steps {
-            self.gas_inspector.step_end(interp, data, is_static, eval);
+            self.gas_inspector.step_end(interp, data, eval);
             self.fill_step_on_step_end(interp, data, eval);
             return eval
         }
@@ -306,9 +303,8 @@ where
         &mut self,
         data: &mut EVMData<'_, DB>,
         inputs: &mut CallInputs,
-        is_static: bool,
     ) -> (InstructionResult, Gas, Bytes) {
-        self.gas_inspector.call(data, inputs, is_static);
+        self.gas_inspector.call(data, inputs);
 
         // determine correct `from` and `to`  based on the call scheme
         let (from, to) = match inputs.context.scheme {
@@ -337,9 +333,8 @@ where
         gas: Gas,
         ret: InstructionResult,
         out: Bytes,
-        is_static: bool,
     ) -> (InstructionResult, Gas, Bytes) {
-        self.gas_inspector.call_end(data, inputs, gas, ret, out.clone(), is_static);
+        self.gas_inspector.call_end(data, inputs, gas, ret, out.clone());
 
         self.fill_trace_on_call_end(
             ret,

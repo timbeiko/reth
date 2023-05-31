@@ -1,9 +1,9 @@
 use crate::{
     database::{State, SubState},
-    stack::{InspectorStack, InspectorStackConfig},
+    stack::{InspectorStack, InspectorStackConfig}, new_executor::NewExecutor,
 };
 use reth_primitives::ChainSpec;
-use reth_provider::{ExecutorFactory, StateProvider};
+use reth_provider::{ExecutorFactory, StateProvider, BlockExecutor};
 
 use crate::executor::Executor;
 use std::sync::Arc;
@@ -46,6 +46,11 @@ impl ExecutorFactory for Factory {
             executor = executor.with_stack(stack.clone());
         }
         executor
+    }
+
+    fn revm_state_with_sp<SP: StateProvider>(&self, sp: SP) -> Option<Box<dyn BlockExecutor<SP>>> {
+        let database_state = State::new(sp);
+        NewExecutor::new(self.chain_spec.clone(), database_state)
     }
 
     /// Return internal chainspec

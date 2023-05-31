@@ -1,12 +1,13 @@
 use crate::{
-    database::SubState,
+    database::{State, SubState},
     env::{fill_cfg_and_block_env, fill_tx_env},
     eth_dao_fork::{DAO_HARDFORK_BENEFICIARY, DAO_HARDKFORK_ACCOUNTS},
     into_reth_log,
     stack::{InspectorStack, InspectorStackConfig},
-    to_reth_acc, state_change::post_block_balance_increments,
+    state_change::post_block_balance_increments,
+    to_reth_acc,
 };
-use reth_interfaces::executor::BlockExecutionError;
+use reth_interfaces::{executor::BlockExecutionError, Error};
 use reth_primitives::{
     Account, Address, Block, BlockNumber, Bloom, Bytecode, ChainSpec, Hardfork, Header, Receipt,
     ReceiptWithBloom, TransactionSigned, H256, U256,
@@ -18,7 +19,7 @@ use revm::{
         hash_map::{self, Entry},
         Account as RevmAccount, AccountInfo, ResultAndState,
     },
-    EVM,
+    State as RevmState, EVM,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -26,38 +27,30 @@ use std::{
 };
 
 /// Main block executor
-pub struct Executor<DB>
-where
-    DB: StateProvider,
-{
+pub struct NewExecutor {
     /// The configured chain-spec
     pub chain_spec: Arc<ChainSpec>,
-    evm: EVM<SubState<DB>>,
+    evm: EVM<RevmState<Error>>,
     stack: InspectorStack,
 }
 
-impl<DB> From<Arc<ChainSpec>> for Executor<DB>
-where
-    DB: StateProvider,
-{
+impl From<Arc<ChainSpec>> for NewExecutor {
     /// Instantiates a new executor from the chainspec. Must call
     /// `with_db` to set the database before executing.
     fn from(chain_spec: Arc<ChainSpec>) -> Self {
         let evm = EVM::new();
-        Executor { chain_spec, evm, stack: InspectorStack::new(InspectorStackConfig::default()) }
+        NewExecutor { chain_spec, evm, stack: InspectorStack::new(InspectorStackConfig::default()) }
     }
 }
 
-impl<DB> Executor<DB>
-where
-    DB: StateProvider,
-{
+impl NewExecutor {
     /// Creates a new executor from the given chain spec and database.
-    pub fn new(chain_spec: Arc<ChainSpec>, db: SubState<DB>) -> Self {
+    pub fn new<DB: StateProvider>(chain_spec: Arc<ChainSpec>, db: State<DB>) -> Self {
         let mut evm = EVM::new();
-        evm.database(db);
+        let revm_state = RevmState::new_with_transtion(Box::new(db));
+        evm.database(revm_state);
 
-        Executor { chain_spec, evm, stack: InspectorStack::new(InspectorStackConfig::default()) }
+        NewExecutor { chain_spec, evm, stack: InspectorStack::new(InspectorStackConfig::default()) }
     }
 
     /// Configures the executor with the given inspectors.
@@ -67,7 +60,7 @@ where
     }
 
     /// Gives a reference to the database
-    pub fn db(&mut self) -> &mut SubState<DB> {
+    pub fn db(&mut self) -> &mut RevmState<Error> {
         self.evm.db().expect("db to not be moved")
     }
 
@@ -110,7 +103,8 @@ where
         post_state: &mut PostState,
     ) {
         let db = self.db();
-        commit_state_changes(db, post_state, block_number, changes, has_state_clear_eip);
+        // DO nothing commit is done internally.
+        //commit_state_changes(db, post_state, block_number, changes, has_state_clear_eip);
     }
 
     /// Collect all balance changes at the end of the block.
@@ -131,33 +125,33 @@ where
     }
 
     /// Irregular state change at Ethereum DAO hardfork
-    fn apply_dao_fork_changes(
-        &mut self,
-        block_number: BlockNumber,
-        post_state: &mut PostState,
-    ) -> Result<(), BlockExecutionError> {
-        let db = self.db();
+    // fn apply_dao_fork_changes(
+    //     &mut self,
+    //     block_number: BlockNumber,
+    //     post_state: &mut PostState,
+    // ) -> Result<(), BlockExecutionError> {
+    //     let db = self.db();
 
-        let mut drained_balance = U256::ZERO;
+    //     let mut drained_balance = U256::ZERO;
 
-        // drain all accounts ether
-        for address in DAO_HARDKFORK_ACCOUNTS {
-            let db_account =
-                db.load_account(address).map_err(|_| BlockExecutionError::ProviderError)?;
-            let old = to_reth_acc(&db_account.info);
-            // drain balance
-            drained_balance += core::mem::take(&mut db_account.info.balance);
-            let new = to_reth_acc(&db_account.info);
-            // assume it is changeset as it is irregular state change
-            post_state.change_account(block_number, address, old, new);
-        }
+    //     // drain all accounts ether
+    //     for address in DAO_HARDKFORK_ACCOUNTS {
+    //         let db_account =
+    //             db.load_account(address).map_err(|_| BlockExecutionError::ProviderError)?;
+    //         let old = to_reth_acc(&db_account.info);
+    //         // drain balance
+    //         drained_balance += core::mem::take(&mut db_account.info.balance);
+    //         let new = to_reth_acc(&db_account.info);
+    //         // assume it is changeset as it is irregular state change
+    //         post_state.change_account(block_number, address, old, new);
+    //     }
 
-        // add drained ether to beneficiary.
-        let beneficiary = DAO_HARDFORK_BENEFICIARY;
-        self.increment_account_balance(block_number, beneficiary, drained_balance, post_state)?;
+    //     // add drained ether to beneficiary.
+    //     let beneficiary = DAO_HARDFORK_BENEFICIARY;
+    //     self.increment_account_balance(block_number, beneficiary, drained_balance, post_state)?;
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     /// Increment the balance for the given account in the [PostState].
     fn increment_account_balance(
@@ -218,7 +212,7 @@ where
     ) -> Result<(PostState, u64), BlockExecutionError> {
         // perf: do not execute empty blocks
         if block.body.is_empty() {
-            return Ok((PostState::default(), 0))
+            return Ok((PostState::default(), 0));
         }
         let senders = self.recover_senders(&block.body, senders)?;
 
@@ -234,7 +228,7 @@ where
                 return Err(BlockExecutionError::TransactionGasLimitMoreThanAvailableBlockGas {
                     transaction_gas_limit: transaction.gas_limit(),
                     block_available_gas,
-                })
+                });
             }
             // Execute transaction.
             let ResultAndState { result, state } = self.transact(transaction, sender)?;
@@ -269,10 +263,7 @@ where
     }
 }
 
-impl<DB> BlockExecutor<DB> for Executor<DB>
-where
-    DB: StateProvider,
-{
+impl<SP: StateProvider> BlockExecutor<SP> for NewExecutor {
     fn execute(
         &mut self,
         block: &Block,
@@ -287,7 +278,7 @@ where
             return Err(BlockExecutionError::BlockGasUsed {
                 got: cumulative_gas_used,
                 expected: block.gas_used,
-            })
+            });
         }
 
         // Add block rewards
@@ -297,9 +288,9 @@ where
         }
 
         // Perform DAO irregular state change
-        if self.chain_spec.fork(Hardfork::Dao).transitions_at_block(block.number) {
-            self.apply_dao_fork_changes(block.number, &mut post_state)?;
-        }
+        // if self.chain_spec.fork(Hardfork::Dao).transitions_at_block(block.number) {
+        //     self.apply_dao_fork_changes(block.number, &mut post_state)?;
+        // }
         Ok(post_state)
     }
 
@@ -309,7 +300,8 @@ where
         total_difficulty: U256,
         senders: Option<Vec<Address>>,
     ) -> Result<PostState, BlockExecutionError> {
-        let post_state = self.execute(block, total_difficulty, senders)?;
+        let post_state =
+            <NewExecutor as BlockExecutor<SP>>::execute(self, block, total_difficulty, senders)?;
 
         // TODO Before Byzantium, receipts contained state root that would mean that expensive
         // operation as hashing that is needed for state root got calculated in every
@@ -325,21 +317,25 @@ where
 
         Ok(post_state)
     }
+
+    fn return_post_state(&mut self) -> PostState {
+        // TODO
+        PostState::default()
+    }
 }
 
 /// Increment the balance for the given account in the [PostState].
 ///
 /// Returns an error if the database encountered an error while loading the account.
-pub fn increment_account_balance<DB>(
-    db: &mut CacheDB<DB>,
+pub fn increment_account_balance(
+    db: &mut RevmState<Error>,
     post_state: &mut PostState,
     block_number: BlockNumber,
     address: Address,
     increment: U256,
-) -> Result<(), <DB as DatabaseRef>::Error>
-where
-    DB: DatabaseRef,
-{
+) -> Result<(), Error> {
+    // TODO support revm state increment.
+    
     let beneficiary = db.load_account(address)?;
     let old = to_reth_acc(&beneficiary.info);
     // Increment beneficiary balance by mutating db entry in place.
@@ -374,146 +370,145 @@ where
     Ok(())
 }
 
-/// Commit change to the _run-time_ database [CacheDB], and update the given [PostState] with the
-/// changes made in the transaction, which can be persisted to the database.
-///
-/// Note: This does _not_ commit to the underlying database [DatabaseRef], but only to the
-/// [CacheDB].
-pub fn commit_state_changes<DB>(
-    db: &mut CacheDB<DB>,
-    post_state: &mut PostState,
-    block_number: BlockNumber,
-    changes: hash_map::HashMap<Address, RevmAccount>,
-    has_state_clear_eip: bool,
-) where
-    DB: DatabaseRef,
-{
-    // iterate over all changed accounts
-    for (address, account) in changes {
-        if account.is_selfdestructed() {
-            // get old account that we are destroying.
-            let db_account = match db.accounts.entry(address) {
-                Entry::Occupied(entry) => entry.into_mut(),
-                Entry::Vacant(_entry) => {
-                    panic!("Left panic to critically jumpout if happens, as every account should be hot loaded.");
-                }
-            };
+// /// Commit change to the _run-time_ database [CacheDB], and update the given [PostState] with the
+// /// changes made in the transaction, which can be persisted to the database.
+// ///
+// /// Note: This does _not_ commit to the underlying database [DatabaseRef], but only to the
+// /// [CacheDB].
+// pub fn commit_state_changes(
+//     db: &mut RevmState<Error>,
+//     post_state: &mut PostState,
+//     block_number: BlockNumber,
+//     changes: hash_map::HashMap<Address, RevmAccount>,
+//     has_state_clear_eip: bool,
+// )
+// {
+//     // iterate over all changed accounts
+//     for (address, account) in changes {
+//         if account.is_selfdestructed() {
+//             // get old account that we are destroying.
+//             let db_account = match db.accounts.entry(address) {
+//                 Entry::Occupied(entry) => entry.into_mut(),
+//                 Entry::Vacant(_entry) => {
+//                     panic!("Left panic to critically jumpout if happens, as every account should be hot loaded.");
+//                 }
+//             };
 
-            let account_exists = !matches!(db_account.account_state, AccountState::NotExisting);
-            if account_exists {
-                // Insert into `change` a old account and None for new account
-                // and mark storage to be wiped
-                post_state.destroy_account(block_number, address, to_reth_acc(&db_account.info));
-            }
+//             let account_exists = !matches!(db_account.account_state, AccountState::NotExisting);
+//             if account_exists {
+//                 // Insert into `change` a old account and None for new account
+//                 // and mark storage to be wiped
+//                 post_state.destroy_account(block_number, address, to_reth_acc(&db_account.info));
+//             }
 
-            // clear cached DB and mark account as not existing
-            db_account.storage.clear();
-            db_account.account_state = AccountState::NotExisting;
-            db_account.info = AccountInfo::default();
+//             // clear cached DB and mark account as not existing
+//             db_account.storage.clear();
+//             db_account.account_state = AccountState::NotExisting;
+//             db_account.info = AccountInfo::default();
 
-            continue
-        } else {
-            // check if account code is new or old.
-            // does it exist inside cached contracts if it doesn't it is new bytecode that
-            // we are inserting inside `change`
-            if let Some(ref code) = account.info.code {
-                if !code.is_empty() && !db.contracts.contains_key(&account.info.code_hash) {
-                    db.contracts.insert(account.info.code_hash, code.clone());
-                    post_state.add_bytecode(account.info.code_hash, Bytecode(code.clone()));
-                }
-            }
+//             continue;
+//         } else {
+//             // check if account code is new or old.
+//             // does it exist inside cached contracts if it doesn't it is new bytecode that
+//             // we are inserting inside `change`
+//             if let Some(ref code) = account.info.code {
+//                 if !code.is_empty() && !db.contracts.contains_key(&account.info.code_hash) {
+//                     db.contracts.insert(account.info.code_hash, code.clone());
+//                     post_state.add_bytecode(account.info.code_hash, Bytecode(code.clone()));
+//                 }
+//             }
 
-            // get old account that is going to be overwritten or none if it does not exist
-            // and get new account that was just inserted. new account mut ref is used for
-            // inserting storage
-            let cached_account = match db.accounts.entry(address) {
-                Entry::Vacant(entry) => {
-                    let entry = entry.insert(Default::default());
-                    entry.info = account.info.clone();
-                    entry.account_state = AccountState::NotExisting; // we will promote account state down the road
-                    let new_account = to_reth_acc(&entry.info);
+//             // get old account that is going to be overwritten or none if it does not exist
+//             // and get new account that was just inserted. new account mut ref is used for
+//             // inserting storage
+//             let cached_account = match db.accounts.entry(address) {
+//                 Entry::Vacant(entry) => {
+//                     let entry = entry.insert(Default::default());
+//                     entry.info = account.info.clone();
+//                     entry.account_state = AccountState::NotExisting; // we will promote account state down the road
+//                     let new_account = to_reth_acc(&entry.info);
 
-                    #[allow(clippy::nonminimal_bool)]
-                    // If account was touched before state clear EIP, create it.
-                    if !has_state_clear_eip ||
-                        // If account was touched after state clear EIP, create it only if it is not empty.
-                        (has_state_clear_eip && !new_account.is_empty())
-                    {
-                        post_state.create_account(block_number, address, new_account);
-                    }
+//                     #[allow(clippy::nonminimal_bool)]
+//                     // If account was touched before state clear EIP, create it.
+//                     if !has_state_clear_eip ||
+//                         // If account was touched after state clear EIP, create it only if it is not empty.
+//                         (has_state_clear_eip && !new_account.is_empty())
+//                     {
+//                         post_state.create_account(block_number, address, new_account);
+//                     }
 
-                    entry
-                }
-                Entry::Occupied(entry) => {
-                    let entry = entry.into_mut();
+//                     entry
+//                 }
+//                 Entry::Occupied(entry) => {
+//                     let entry = entry.into_mut();
 
-                    let old_account = to_reth_acc(&entry.info);
-                    let new_account = to_reth_acc(&account.info);
+//                     let old_account = to_reth_acc(&entry.info);
+//                     let new_account = to_reth_acc(&account.info);
 
-                    let account_non_existent =
-                        matches!(entry.account_state, AccountState::NotExisting);
+//                     let account_non_existent =
+//                         matches!(entry.account_state, AccountState::NotExisting);
 
-                    // Before state clear EIP, create account if it doesn't exist
-                    if (!has_state_clear_eip && account_non_existent)
-                        // After state clear EIP, create account only if it is not empty
-                        || (has_state_clear_eip && entry.info.is_empty() && !new_account.is_empty())
-                    {
-                        post_state.create_account(block_number, address, new_account);
-                    } else if old_account != new_account {
-                        post_state.change_account(
-                            block_number,
-                            address,
-                            to_reth_acc(&entry.info),
-                            new_account,
-                        );
-                    } else if has_state_clear_eip && new_account.is_empty() && !account_non_existent
-                    {
-                        // The account was touched, but it is empty, so it should be deleted.
-                        // This also deletes empty accounts which were created before state clear
-                        // EIP.
-                        post_state.destroy_account(block_number, address, new_account);
-                    }
+//                     // Before state clear EIP, create account if it doesn't exist
+//                     if (!has_state_clear_eip && account_non_existent)
+//                         // After state clear EIP, create account only if it is not empty
+//                         || (has_state_clear_eip && entry.info.is_empty() && !new_account.is_empty())
+//                     {
+//                         post_state.create_account(block_number, address, new_account);
+//                     } else if old_account != new_account {
+//                         post_state.change_account(
+//                             block_number,
+//                             address,
+//                             to_reth_acc(&entry.info),
+//                             new_account,
+//                         );
+//                     } else if has_state_clear_eip && new_account.is_empty() && !account_non_existent
+//                     {
+//                         // The account was touched, but it is empty, so it should be deleted.
+//                         // This also deletes empty accounts which were created before state clear
+//                         // EIP.
+//                         post_state.destroy_account(block_number, address, new_account);
+//                     }
 
-                    entry.info = account.info.clone();
-                    entry
-                }
-            };
+//                     entry.info = account.info.clone();
+//                     entry
+//                 }
+//             };
 
-            //TODO(redo this)cached_account.account_state = if account.storage_cleared {
-            cached_account.account_state = if account.is_created() {
-                cached_account.storage.clear();
-                AccountState::StorageCleared
-            } else if cached_account.account_state.is_storage_cleared() {
-                // the account already exists and its storage was cleared, preserve its previous
-                // state
-                AccountState::StorageCleared
-            } else if has_state_clear_eip &&
-                matches!(cached_account.account_state, AccountState::NotExisting) &&
-                cached_account.info.is_empty()
-            {
-                AccountState::NotExisting
-            } else {
-                AccountState::Touched
-            };
+//             //TODO(redo this)cached_account.account_state = if account.storage_cleared {
+//             cached_account.account_state = if account.is_created() {
+//                 cached_account.storage.clear();
+//                 AccountState::StorageCleared
+//             } else if cached_account.account_state.is_storage_cleared() {
+//                 // the account already exists and its storage was cleared, preserve its previous
+//                 // state
+//                 AccountState::StorageCleared
+//             } else if has_state_clear_eip
+//                 && matches!(cached_account.account_state, AccountState::NotExisting)
+//                 && cached_account.info.is_empty()
+//             {
+//                 AccountState::NotExisting
+//             } else {
+//                 AccountState::Touched
+//             };
 
-            // Insert storage.
-            let mut storage_changeset = BTreeMap::new();
+//             // Insert storage.
+//             let mut storage_changeset = BTreeMap::new();
 
-            // insert storage into new db account.
-            cached_account.storage.extend(account.storage.into_iter().map(|(key, value)| {
-                if value.is_changed() {
-                    storage_changeset.insert(key, (value.original_value(), value.present_value()));
-                }
-                (key, value.present_value())
-            }));
+//             // insert storage into new db account.
+//             cached_account.storage.extend(account.storage.into_iter().map(|(key, value)| {
+//                 if value.is_changed() {
+//                     storage_changeset.insert(key, (value.original_value(), value.present_value()));
+//                 }
+//                 (key, value.present_value())
+//             }));
 
-            // Insert into change.
-            if !storage_changeset.is_empty() {
-                post_state.change_storage(block_number, address, storage_changeset);
-            }
-        }
-    }
-}
+//             // Insert into change.
+//             if !storage_changeset.is_empty() {
+//                 post_state.change_storage(block_number, address, storage_changeset);
+//             }
+//         }
+//     }
+//}
 
 /// Verify receipts
 pub fn verify_receipt<'a>(
@@ -528,7 +523,7 @@ pub fn verify_receipt<'a>(
         return Err(BlockExecutionError::ReceiptRootDiff {
             got: receipts_root,
             expected: expected_receipts_root,
-        })
+        });
     }
 
     // Create header log bloom.
@@ -537,7 +532,7 @@ pub fn verify_receipt<'a>(
         return Err(BlockExecutionError::BloomLogDiff {
             expected: Box::new(expected_logs_bloom),
             got: Box::new(logs_bloom),
-        })
+        });
     }
 
     Ok(())

@@ -14,8 +14,14 @@ pub trait ExecutorFactory: Send + Sync + 'static {
     /// Executor with [`StateProvider`]
     fn with_sp<SP: StateProvider>(&self, sp: SP) -> Self::Executor<SP>;
 
+    /// TODO REWORK only for integration tests.
+    fn revm_state_with_sp<SP: StateProvider>(&self, sp: SP) -> Option<Box<dyn BlockExecutor<SP>>> {
+        None
+    }
+
     /// Return internal chainspec
     fn chain_spec(&self) -> &ChainSpec;
+    
 }
 
 /// An executor capable of executing a block.
@@ -42,4 +48,11 @@ pub trait BlockExecutor<SP: StateProvider> {
         total_difficulty: U256,
         senders: Option<Vec<Address>>,
     ) -> Result<PostState, BlockExecutionError>;
+
+
+    /// TEMPORARY return post state after execution multiple blocks.
+    /// Idea is to hide multi block execution.
+    fn return_post_state(&mut self) -> PostState {
+        PostState::default()
+    }
 }

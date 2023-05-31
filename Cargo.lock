@@ -5450,6 +5450,7 @@ dependencies = [
  "reth-revm",
  "reth-rlp",
  "reth-trie",
+ "revm",
  "thiserror",
  "tokio",
  "tokio-stream",

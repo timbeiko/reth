@@ -23,6 +23,9 @@ reth-provider = { path = "../storage/provider" }
 reth-metrics = { path = "../metrics" }
 reth-trie = { path = "../trie" }
 
+# temp wrap it around reth-revm crates
+revm = "3"
+
 # async
 tokio = { version = "1.21.2", features = ["sync"] }
 tokio-stream = "0.1.10"

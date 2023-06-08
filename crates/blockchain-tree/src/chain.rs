@@ -279,6 +279,16 @@ impl AppendableChain {
         let mut executor = externals.executor_factory.with_sp(&provider);
         let post_state = executor.execute_and_verify_receipt(&block, U256::MAX, Some(senders))?;
 
+        // check state root
+        let state_root = provider.state_root(post_state.clone())?;
+        if block.state_root != state_root {
+            return Err(ConsensusError::BodyStateRootDiff {
+                got: state_root,
+                expected: block.state_root,
+            }
+            .into())
+        }
+
         Ok(post_state)
     }
 

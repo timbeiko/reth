@@ -10,6 +10,8 @@ pub enum BlockExecutionError {
     EVM { hash: H256, message: String },
     #[error("Failed to recover sender for transaction")]
     SenderRecoveryError,
+    #[error("Incrementing balance failed")]
+    IncrementBalanceFailed,
     #[error("Receipt root {got:?} is different than expected {expected:?}.")]
     ReceiptRootDiff { got: H256, expected: H256 },
     #[error("Header bloom filter {got:?} is different than expected {expected:?}.")]

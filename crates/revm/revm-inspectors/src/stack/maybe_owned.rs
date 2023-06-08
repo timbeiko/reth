@@ -83,15 +83,9 @@ where
         InstructionResult::Continue
     }
 
-    fn step(
-        &mut self,
-        interp: &mut Interpreter,
-        data: &mut EVMData<'_, DB>,
-    ) -> InstructionResult {
+    fn step(&mut self, interp: &mut Interpreter, data: &mut EVMData<'_, DB>) -> InstructionResult {
         match self {
-            MaybeOwnedInspector::Owned(insp) => {
-                return insp.borrow_mut().step(interp, data)
-            }
+            MaybeOwnedInspector::Owned(insp) => return insp.borrow_mut().step(interp, data),
             MaybeOwnedInspector::Stacked(_) => {}
         }
 
@@ -135,9 +129,7 @@ where
         inputs: &mut CallInputs,
     ) -> (InstructionResult, Gas, Bytes) {
         match self {
-            MaybeOwnedInspector::Owned(insp) => {
-                return insp.borrow_mut().call(data, inputs)
-            }
+            MaybeOwnedInspector::Owned(insp) => return insp.borrow_mut().call(data, inputs),
             MaybeOwnedInspector::Stacked(_) => {}
         }
 

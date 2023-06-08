@@ -15,9 +15,7 @@ use reth_primitives::{
     stage::{StageCheckpoint, StageId},
     Block, BlockNumber, BlockWithSenders, TransactionSigned, U256,
 };
-use reth_provider::{
-    post_state::PostState, BlockExecutor, ExecutorFactory, LatestStateProviderRef, Transaction,
-};
+use reth_provider::{BlockExecutor, ExecutorFactory, LatestStateProviderRef, Transaction};
 use std::time::Instant;
 use tracing::*;
 
@@ -154,12 +152,9 @@ impl<EF: ExecutorFactory> ExecutionStage<EF> {
 
             // Execute the block
             let (block, senders) = block.into_components();
-            executor
-                .execute_and_verify_receipt(&block, td, Some(senders))
-                .map_err(|error| StageError::ExecutionError {
-                    block: block.header.clone().seal_slow(),
-                    error,
-                })?;
+            executor.execute_and_verify_receipt(&block, td, Some(senders)).map_err(|error| {
+                StageError::ExecutionError { block: block.header.clone().seal_slow(), error }
+            })?;
 
             // Gas metrics
             self.metrics
@@ -182,7 +177,7 @@ impl<EF: ExecutorFactory> ExecutionStage<EF> {
             if self.thresholds.is_end_of_batch(block_number - start_block, 0)
             //, state.size_hint() as u64)
             {
-                break;
+                break
             }
         }
         let state = executor.return_post_state();
@@ -254,7 +249,7 @@ impl<EF: ExecutorFactory, DB: Database> Stage<DB> for ExecutionStage<EF> {
             input.unwind_block_range_with_threshold(self.thresholds.max_blocks.unwrap_or(u64::MAX));
 
         if range.is_empty() {
-            return Ok(UnwindOutput { checkpoint: StageCheckpoint::new(input.unwind_to) });
+            return Ok(UnwindOutput { checkpoint: StageCheckpoint::new(input.unwind_to) })
         }
 
         // get all batches for account change
@@ -295,7 +290,7 @@ impl<EF: ExecutorFactory, DB: Database> Stage<DB> for ExecutionStage<EF> {
         let mut rev_acc_changeset_walker = account_changeset.walk_back(None)?;
         while let Some((block_num, _)) = rev_acc_changeset_walker.next().transpose()? {
             if block_num <= unwind_to {
-                break;
+                break
             }
             // delete all changesets
             rev_acc_changeset_walker.delete_current()?;
@@ -304,7 +299,7 @@ impl<EF: ExecutorFactory, DB: Database> Stage<DB> for ExecutionStage<EF> {
         let mut rev_storage_changeset_walker = storage_changeset.walk_back(None)?;
         while let Some((key, _)) = rev_storage_changeset_walker.next().transpose()? {
             if key.block_number() < *range.start() {
-                break;
+                break
             }
             // delete all changesets
             rev_storage_changeset_walker.delete_current()?;
@@ -358,8 +353,8 @@ impl ExecutionStageThresholds {
     /// Check if the batch thresholds have been hit.
     #[inline]
     pub fn is_end_of_batch(&self, blocks_processed: u64, changes_processed: u64) -> bool {
-        blocks_processed >= self.max_blocks.unwrap_or(u64::MAX)
-            || changes_processed >= self.max_changes.unwrap_or(u64::MAX)
+        blocks_processed >= self.max_blocks.unwrap_or(u64::MAX) ||
+            changes_processed >= self.max_changes.unwrap_or(u64::MAX)
     }
 
     /// Check if the history write threshold has been hit.

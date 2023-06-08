@@ -3,7 +3,8 @@ use reth_primitives::{H160, H256, KECCAK_EMPTY, U256};
 use reth_provider::StateProvider;
 use revm::{
     db::{CacheDB, DatabaseRef},
-    primitives::{AccountInfo, Bytecode}, Database,
+    primitives::{AccountInfo, Bytecode},
+    Database,
 };
 
 /// SubState of database. Uses revm internal cache with binding to reth StateProvider trait.
@@ -65,7 +66,7 @@ impl<DB: StateProvider> Database for State<DB> {
     fn block_hash(&mut self, number: U256) -> Result<H256, Self::Error> {
         // Note: this unwrap is potentially unsafe
         Ok(self.0.block_hash(number.try_into().unwrap())?.unwrap_or_default())
-    }    
+    }
 }
 
 impl<DB: StateProvider> DatabaseRef for State<DB> {

@@ -27,14 +27,14 @@ use std::{
 };
 
 /// Main block executor
-pub struct NewExecutor {
+pub struct NewExecutor<'a> {
     /// The configured chain-spec
     pub chain_spec: Arc<ChainSpec>,
-    evm: EVM<RevmState<Error>>,
+    evm: EVM<RevmState<'a, Error>>,
     stack: InspectorStack,
 }
 
-impl From<Arc<ChainSpec>> for NewExecutor {
+impl<'a> From<Arc<ChainSpec>> for NewExecutor<'a> {
     /// Instantiates a new executor from the chainspec. Must call
     /// `with_db` to set the database before executing.
     fn from(chain_spec: Arc<ChainSpec>) -> Self {
@@ -43,9 +43,9 @@ impl From<Arc<ChainSpec>> for NewExecutor {
     }
 }
 
-impl NewExecutor {
+impl<'a> NewExecutor<'a> {
     /// Creates a new executor from the given chain spec and database.
-    pub fn new<DB: StateProvider>(chain_spec: Arc<ChainSpec>, db: State<DB>) -> Self {
+    pub fn new<DB: StateProvider + 'a>(chain_spec: Arc<ChainSpec>, db: State<DB>) -> Self {
         let mut evm = EVM::new();
         let revm_state = RevmState::new_with_transtion(Box::new(db));
         evm.database(revm_state);
@@ -60,7 +60,7 @@ impl NewExecutor {
     }
 
     /// Gives a reference to the database
-    pub fn db(&mut self) -> &mut RevmState<Error> {
+    pub fn db(&mut self) -> &mut RevmState<'a, Error> {
         self.evm.db().expect("db to not be moved")
     }
 
@@ -153,18 +153,6 @@ impl NewExecutor {
     //     Ok(())
     // }
 
-    /// Increment the balance for the given account in the [PostState].
-    fn increment_account_balance(
-        &mut self,
-        block_number: BlockNumber,
-        address: Address,
-        increment: U256,
-        post_state: &mut PostState,
-    ) -> Result<(), BlockExecutionError> {
-        increment_account_balance(self.db(), post_state, block_number, address, increment)
-            .map_err(|_| BlockExecutionError::ProviderError)
-    }
-
     /// Runs a single transaction in the configured environment and proceeds
     /// to return the result and state diff (without applying it).
     ///
@@ -212,7 +200,7 @@ impl NewExecutor {
     ) -> Result<(PostState, u64), BlockExecutionError> {
         // perf: do not execute empty blocks
         if block.body.is_empty() {
-            return Ok((PostState::default(), 0));
+            return Ok((PostState::default(), 0))
         }
         let senders = self.recover_senders(&block.body, senders)?;
 
@@ -228,7 +216,7 @@ impl NewExecutor {
                 return Err(BlockExecutionError::TransactionGasLimitMoreThanAvailableBlockGas {
                     transaction_gas_limit: transaction.gas_limit(),
                     block_available_gas,
-                });
+                })
             }
             // Execute transaction.
             let ResultAndState { result, state } = self.transact(transaction, sender)?;
@@ -263,7 +251,7 @@ impl NewExecutor {
     }
 }
 
-impl<SP: StateProvider> BlockExecutor<SP> for NewExecutor {
+impl<'a, SP: StateProvider> BlockExecutor<SP> for NewExecutor<'a> {
     fn execute(
         &mut self,
         block: &Block,
@@ -278,16 +266,18 @@ impl<SP: StateProvider> BlockExecutor<SP> for NewExecutor {
             return Err(BlockExecutionError::BlockGasUsed {
                 got: cumulative_gas_used,
                 expected: block.gas_used,
-            });
+            })
         }
 
         // Add block rewards
         let balance_increments = self.post_block_balance_increments(block, total_difficulty);
-        for (address, increment) in balance_increments.into_iter() {
-            self.increment_account_balance(block.number, address, increment, &mut post_state)?;
-        }
+        self.db()
+            .increment_balances(
+                balance_increments.into_iter().map(|(k, v)| (k, v.try_into().unwrap())),
+            )
+            .map_err(|_| BlockExecutionError::IncrementBalanceFailed)?;
 
-        // Perform DAO irregular state change
+        // TODO Perform DAO irregular state change
         // if self.chain_spec.fork(Hardfork::Dao).transitions_at_block(block.number) {
         //     self.apply_dao_fork_changes(block.number, &mut post_state)?;
         // }
@@ -300,8 +290,12 @@ impl<SP: StateProvider> BlockExecutor<SP> for NewExecutor {
         total_difficulty: U256,
         senders: Option<Vec<Address>>,
     ) -> Result<PostState, BlockExecutionError> {
-        let post_state =
-            <NewExecutor as BlockExecutor<SP>>::execute(self, block, total_difficulty, senders)?;
+        let post_state = <NewExecutor<'a> as BlockExecutor<SP>>::execute(
+            self,
+            block,
+            total_difficulty,
+            senders,
+        )?;
 
         // TODO Before Byzantium, receipts contained state root that would mean that expensive
         // operation as hashing that is needed for state root got calculated in every
@@ -319,55 +313,10 @@ impl<SP: StateProvider> BlockExecutor<SP> for NewExecutor {
     }
 
     fn return_post_state(&mut self) -> PostState {
-        // TODO
+        let plain_changes = self.evm.db().unwrap().take_bundle().take_sorted_plain_change();
+
         PostState::default()
     }
-}
-
-/// Increment the balance for the given account in the [PostState].
-///
-/// Returns an error if the database encountered an error while loading the account.
-pub fn increment_account_balance(
-    db: &mut RevmState<Error>,
-    post_state: &mut PostState,
-    block_number: BlockNumber,
-    address: Address,
-    increment: U256,
-) -> Result<(), Error> {
-    // TODO support revm state increment.
-    
-    let beneficiary = db.load_account(address)?;
-    let old = to_reth_acc(&beneficiary.info);
-    // Increment beneficiary balance by mutating db entry in place.
-    beneficiary.info.balance += increment;
-    let new = to_reth_acc(&beneficiary.info);
-    match beneficiary.account_state {
-        AccountState::NotExisting => {
-            // if account was not existing that means that storage is not
-            // present.
-            beneficiary.account_state = AccountState::StorageCleared;
-
-            // if account was not present append `Created` changeset
-            post_state.create_account(
-                block_number,
-                address,
-                Account { nonce: 0, balance: new.balance, bytecode_hash: None },
-            )
-        }
-
-        AccountState::StorageCleared | AccountState::Touched | AccountState::None => {
-            // If account is None that means that EVM didn't touch it.
-            // we are changing the state to Touched as account can have
-            // storage in db.
-            if beneficiary.account_state == AccountState::None {
-                beneficiary.account_state = AccountState::Touched;
-            }
-            // if account was present, append changed changeset.
-            post_state.change_account(block_number, address, old, new);
-        }
-    }
-
-    Ok(())
 }
 
 // /// Commit change to the _run-time_ database [CacheDB], and update the given [PostState] with the
@@ -390,8 +339,8 @@ pub fn increment_account_balance(
 //             let db_account = match db.accounts.entry(address) {
 //                 Entry::Occupied(entry) => entry.into_mut(),
 //                 Entry::Vacant(_entry) => {
-//                     panic!("Left panic to critically jumpout if happens, as every account should be hot loaded.");
-//                 }
+//                     panic!("Left panic to critically jumpout if happens, as every account should
+// be hot loaded.");                 }
 //             };
 
 //             let account_exists = !matches!(db_account.account_state, AccountState::NotExisting);
@@ -425,14 +374,14 @@ pub fn increment_account_balance(
 //                 Entry::Vacant(entry) => {
 //                     let entry = entry.insert(Default::default());
 //                     entry.info = account.info.clone();
-//                     entry.account_state = AccountState::NotExisting; // we will promote account state down the road
-//                     let new_account = to_reth_acc(&entry.info);
+//                     entry.account_state = AccountState::NotExisting; // we will promote account
+// state down the road                     let new_account = to_reth_acc(&entry.info);
 
 //                     #[allow(clippy::nonminimal_bool)]
 //                     // If account was touched before state clear EIP, create it.
 //                     if !has_state_clear_eip ||
-//                         // If account was touched after state clear EIP, create it only if it is not empty.
-//                         (has_state_clear_eip && !new_account.is_empty())
+//                         // If account was touched after state clear EIP, create it only if it is
+// not empty.                         (has_state_clear_eip && !new_account.is_empty())
 //                     {
 //                         post_state.create_account(block_number, address, new_account);
 //                     }
@@ -451,8 +400,8 @@ pub fn increment_account_balance(
 //                     // Before state clear EIP, create account if it doesn't exist
 //                     if (!has_state_clear_eip && account_non_existent)
 //                         // After state clear EIP, create account only if it is not empty
-//                         || (has_state_clear_eip && entry.info.is_empty() && !new_account.is_empty())
-//                     {
+//                         || (has_state_clear_eip && entry.info.is_empty() &&
+// !new_account.is_empty())                     {
 //                         post_state.create_account(block_number, address, new_account);
 //                     } else if old_account != new_account {
 //                         post_state.change_account(
@@ -461,8 +410,8 @@ pub fn increment_account_balance(
 //                             to_reth_acc(&entry.info),
 //                             new_account,
 //                         );
-//                     } else if has_state_clear_eip && new_account.is_empty() && !account_non_existent
-//                     {
+//                     } else if has_state_clear_eip && new_account.is_empty() &&
+// !account_non_existent                     {
 //                         // The account was touched, but it is empty, so it should be deleted.
 //                         // This also deletes empty accounts which were created before state clear
 //                         // EIP.
@@ -497,8 +446,8 @@ pub fn increment_account_balance(
 //             // insert storage into new db account.
 //             cached_account.storage.extend(account.storage.into_iter().map(|(key, value)| {
 //                 if value.is_changed() {
-//                     storage_changeset.insert(key, (value.original_value(), value.present_value()));
-//                 }
+//                     storage_changeset.insert(key, (value.original_value(),
+// value.present_value()));                 }
 //                 (key, value.present_value())
 //             }));
 
@@ -523,7 +472,7 @@ pub fn verify_receipt<'a>(
         return Err(BlockExecutionError::ReceiptRootDiff {
             got: receipts_root,
             expected: expected_receipts_root,
-        });
+        })
     }
 
     // Create header log bloom.
@@ -532,7 +481,7 @@ pub fn verify_receipt<'a>(
         return Err(BlockExecutionError::BloomLogDiff {
             expected: Box::new(expected_logs_bloom),
             got: Box::new(logs_bloom),
-        });
+        })
     }
 
     Ok(())

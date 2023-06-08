@@ -115,10 +115,7 @@ impl Compact for Bytecode {
         let decoded = match variant {
             0 => Bytecode(RevmBytecode::new_raw(bytes)),
             1 => Bytecode(unsafe {
-                RevmBytecode::new_checked(
-                    bytes,
-                    buf.read_u64::<BigEndian>().unwrap() as usize,
-                )
+                RevmBytecode::new_checked(bytes, buf.read_u64::<BigEndian>().unwrap() as usize)
             }),
             2 => Bytecode(RevmBytecode {
                 bytecode: bytes,

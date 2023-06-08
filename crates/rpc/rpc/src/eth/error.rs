@@ -209,7 +209,7 @@ pub enum RpcInvalidTransactionError {
     OldLegacyChainId,
     /// The transitions is before Berlin and has access list
     #[error("Transactions before Berlin should not have access list")]
-    AccessListNotSupported
+    AccessListNotSupported,
 }
 
 impl RpcInvalidTransactionError {
@@ -296,7 +296,9 @@ impl From<revm::primitives::InvalidTransaction> for RpcInvalidTransactionError {
             }
             InvalidTransaction::NonceTooHigh { .. } => RpcInvalidTransactionError::NonceTooHigh,
             InvalidTransaction::NonceTooLow { .. } => RpcInvalidTransactionError::NonceTooLow,
-            InvalidTransaction::AccessListNotSupported => RpcInvalidTransactionError::AccessListNotSupported,
+            InvalidTransaction::AccessListNotSupported => {
+                RpcInvalidTransactionError::AccessListNotSupported
+            }
         }
     }
 }

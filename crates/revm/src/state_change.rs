@@ -11,9 +11,7 @@ use reth_primitives::{
     Account, Address, Block, BlockNumber, Bloom, Bytecode, ChainSpec, Hardfork, Header, Receipt,
     ReceiptWithBloom, TransactionSigned, Withdrawal, H256, U256,
 };
-use std::{
-    collections::{HashMap},
-};
+use std::collections::HashMap;
 
 /// Collect all balance changes at the end of the block.
 ///

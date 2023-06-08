@@ -4,7 +4,8 @@ use crate::{
     eth_dao_fork::{DAO_HARDFORK_BENEFICIARY, DAO_HARDKFORK_ACCOUNTS},
     into_reth_log,
     stack::{InspectorStack, InspectorStackConfig},
-    to_reth_acc, state_change::post_block_balance_increments,
+    state_change::post_block_balance_increments,
+    to_reth_acc,
 };
 use reth_interfaces::executor::BlockExecutionError;
 use reth_primitives::{

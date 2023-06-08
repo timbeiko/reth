@@ -257,11 +257,7 @@ where
         self.gas_inspector.initialize_interp(interp, data)
     }
 
-    fn step(
-        &mut self,
-        interp: &mut Interpreter,
-        data: &mut EVMData<'_, DB>,
-    ) -> InstructionResult {
+    fn step(&mut self, interp: &mut Interpreter, data: &mut EVMData<'_, DB>) -> InstructionResult {
         if self.config.record_steps {
             self.gas_inspector.step(interp, data);
             self.start_step(interp, data);

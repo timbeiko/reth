@@ -18,7 +18,11 @@ use reth_db::{
     transaction::{DbTx, DbTxMut, DbTxMutGAT},
     BlockNumberList,
 };
-use reth_interfaces::{db::DatabaseError as DbError, provider::ProviderError};
+use reth_interfaces::{
+    db::DatabaseError as DbError,
+    executor::{BlockExecutionError, BlockValidationError},
+    provider::ProviderError,
+};
 use reth_primitives::{
     keccak256,
     stage::{StageCheckpoint, StageId},
@@ -1444,6 +1448,18 @@ pub enum TransactionError {
         /// Block hash
         block_hash: BlockHash,
     },
+}
+
+impl From<TransactionError> for BlockExecutionError {
+    fn from(value: TransactionError) -> Self {
+        match value {
+            TransactionError::StateRootMismatch { expected, got, block_number, block_hash } => {
+                BlockValidationError::StateRootMismatch { expected, got, block_number, block_hash }
+                    .into()
+            }
+            err => Self::CanonicalCommit { inner: err.to_string() },
+        }
+    }
 }
 
 #[cfg(test)]

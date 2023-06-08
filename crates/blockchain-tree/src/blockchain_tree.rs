@@ -1021,7 +1021,7 @@ impl<DB: Database, C: Consensus, EF: ExecutorFactory> BlockchainTree<DB, C, EF> 
         let (blocks, state) = chain.into_inner();
 
         tx.append_blocks_with_post_state(blocks.into_blocks().collect(), state)
-            .map_err(|e| BlockExecutionError::CanonicalCommit { inner: e.to_string() })?;
+            .map_err(BlockExecutionError::from)?;
 
         tx.commit()?;
 

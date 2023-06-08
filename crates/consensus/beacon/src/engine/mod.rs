@@ -463,15 +463,10 @@ where
 
     /// Checks if the given `head` points to an invalid header, which requires a specific response
     /// to a forkchoice update.
-    ///
-    /// Inserts the head into the invalid header cache if the head has a known invalid ancestor.
     fn check_invalid_ancestor(&mut self, head: H256) -> Option<PayloadStatus> {
         let parent_hash = {
             // check if the head was previously marked as invalid
             let header = self.invalid_headers.get(&head)?.clone();
-
-            // if so then insert with the invalid ancestor
-            self.invalid_headers.insert_with_invalid_ancestor(head, header.clone());
             header.parent_hash
         };
 
@@ -689,7 +684,6 @@ where
 
         // we assume the FCU is valid and at least the head is missing, so we need to start syncing
         // to it
-        trace!(target: "consensus::engine", request=?lowest_unknown_hash, "Triggering full block download for missing ancestors of the new head");
         if self.forkchoice_state_tracker.is_empty() {
             // find the appropriate target to sync to, if we don't have the safe block hash then we
             // start syncing to the safe block via pipeline first
@@ -703,12 +697,13 @@ where
 
             // we need to first check the buffer for the head and its ancestors
             let lowest_unknown_hash = self.lowest_buffered_ancestor_or(target);
-
+            trace!(target: "consensus::engine", request=?lowest_unknown_hash, "Triggering full block download for missing ancestors of the new head");
 
             self.sync.download_full_block(lowest_unknown_hash);
         } else {
             // we need to first check the buffer for the head and its ancestors
             let lowest_unknown_hash = self.lowest_buffered_ancestor_or(state.head_block_hash);
+            trace!(target: "consensus::engine", request=?lowest_unknown_hash, "Triggering full block download for missing ancestors of the new head");
 
             // trigger a full block download for missing hash, or the parent of its lowest buffered
             // ancestor

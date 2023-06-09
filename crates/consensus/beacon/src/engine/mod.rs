@@ -420,6 +420,8 @@ where
     /// Checks if the given `check` hash points to an invalid header, inserting the given `head`
     /// block into the invalid header cache if the `check` hash has a known invalid ancestor.
     ///
+    /// This also checks the `head` block itself it is invalid
+    ///
     /// Returns a payload status response according to the engine API spec if the block is known to
     /// be invalid.
     fn check_invalid_ancestor_with_head(
@@ -428,7 +430,8 @@ where
         head: H256,
     ) -> Option<PayloadStatus> {
         // check if the check hash was previously marked as invalid
-        let header = { self.invalid_headers.get(&check)?.clone() };
+        let header = { self.invalid_headers.get(&check).cloned() }
+            .or_else(|| self.invalid_headers.get(&head).cloned())?;
 
         // populate the latest valid hash field
         let status = self.prepare_invalid_response(header.parent_hash);
@@ -518,7 +521,13 @@ where
 
         let lowest_buffered_ancestor_fcu = self.lowest_buffered_ancestor_or(state.head_block_hash);
 
-        if let Some(status) = self.check_invalid_ancestor(lowest_buffered_ancestor_fcu) {
+        // first check the buffered ancestor, invalidating the head if the buffered ancestor is
+        // invalid
+        //
+        // if the head is invalid, we also return invalid here
+        if let Some(status) = self
+            .check_invalid_ancestor_with_head(lowest_buffered_ancestor_fcu, state.head_block_hash)
+        {
             return Ok(OnForkChoiceUpdated::with_invalid(status))
         }
 

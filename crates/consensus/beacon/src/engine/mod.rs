@@ -1263,7 +1263,9 @@ mod tests {
         test_utils::{NoopFullBlockClient, TestConsensus},
     };
     use reth_payload_builder::test_utils::spawn_test_payload_service;
-    use reth_primitives::{stage::StageCheckpoint, ChainSpec, ChainSpecBuilder, H256, MAINNET};
+    use reth_primitives::{
+        stage::StageCheckpoint, ChainSpec, ChainSpecBuilder, SealedBlockWithSenders, H256, MAINNET,
+    };
     use reth_provider::{
         providers::BlockchainProvider, test_utils::TestExecutorFactory, ShareableDatabase,
         Transaction,
@@ -1541,6 +1543,20 @@ mod tests {
         blocks
             .try_for_each(|b| transaction.insert_block(b.clone(), None))
             .expect("failed to insert");
+        transaction.commit().unwrap();
+    }
+
+    /// Use this instead of [insert_blocks] when inserting hashes for each block is needed
+    fn append_blocks<'a, DB: Database>(
+        db: &DB,
+        mut blocks: impl Iterator<Item = (&'a SealedBlockWithSenders, &'a PostState)>,
+    ) {
+        let mut transaction = Transaction::new(db).unwrap();
+        blocks
+            .try_for_each(|(block, state)| {
+                transaction.append_blocks_with_post_state(vec![block.clone()], state.clone())
+            })
+            .expect("failed to append blocks");
         transaction.commit().unwrap();
     }
 
@@ -1939,10 +1955,12 @@ mod tests {
         async fn payload_pre_merge() {
             let data = BlockChainTestData::default();
             let mut block1 = data.blocks[0].0.block.clone();
+            let block1_post_state = data.blocks[0].1.clone();
             block1.header.difficulty = MAINNET.fork(Hardfork::Paris).ttd().unwrap() - U256::from(1);
             block1 = block1.unseal().seal_slow();
             let (block2, exec_result2) = data.blocks[1].clone();
             let mut block2 = block2.block;
+            let _block2_post_state = data.blocks[1].1.clone();
             block2.withdrawals = None;
             block2.header.parent_hash = block1.hash;
             block2.header.base_fee_per_gas = Some(100);
@@ -1965,7 +1983,14 @@ mod tests {
                 Vec::from([exec_result2]),
             );
 
-            insert_blocks(env.db.as_ref(), [&data.genesis, &block1].into_iter());
+            append_blocks(
+                env.db.as_ref(),
+                [
+                    (&data.genesis.seal_with_senders().unwrap(), &PostState::default()),
+                    (&block1.clone().seal_with_senders().unwrap(), &block1_post_state),
+                ]
+                .into_iter(),
+            );
 
             let mut engine_rx = spawn_consensus_engine(consensus_engine);
 

@@ -452,7 +452,7 @@ impl<DB: Database, C: Consensus, EF: ExecutorFactory> BlockchainTree<DB, C, EF> 
                     parent,
                     &self.externals,
                 )?;
-                (BlockStatus::Accepted, chain)
+                (BlockStatus::Valid, chain)
             }
         };
 
@@ -524,13 +524,7 @@ impl<DB: Database, C: Consensus, EF: ExecutorFactory> BlockchainTree<DB, C, EF> 
 
             self.block_indices.insert_non_fork_block(block_number, block_hash, chain_id);
 
-            if block_kind.extends_canonical_head() {
-                // if the block can be traced back to the canonical head, we were able to fully
-                // validate it
-                Ok(BlockStatus::Valid)
-            } else {
-                Ok(BlockStatus::Accepted)
-            }
+            Ok(BlockStatus::Valid)
         } else {
             debug!(target: "blockchain_tree", ?canonical_fork, "Starting new fork from side chain");
             // the block starts a new fork
@@ -542,7 +536,7 @@ impl<DB: Database, C: Consensus, EF: ExecutorFactory> BlockchainTree<DB, C, EF> 
                 &self.externals,
             )?;
             self.insert_chain(chain);
-            Ok(BlockStatus::Accepted)
+            Ok(BlockStatus::Valid)
         };
 
         // After we inserted the block, we try to connect any buffered blocks

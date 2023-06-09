@@ -136,12 +136,9 @@ fn stage_checkpoint<DB: Database>(
 
 #[cfg(test)]
 mod tests {
-
-    use assert_matches::assert_matches;
-    use std::collections::BTreeMap;
-
     use super::*;
     use crate::test_utils::TestTransaction;
+    use assert_matches::assert_matches;
     use reth_db::{
         models::{
             storage_sharded_key::{StorageShardedKey, NUM_OF_INDICES_IN_SHARD},
@@ -152,6 +149,7 @@ mod tests {
         BlockNumberList,
     };
     use reth_primitives::{hex_literal::hex, StorageEntry, H160, H256, U256};
+    use std::collections::BTreeMap;
 
     const ADDRESS: H160 = H160(hex!("0000000000000000000000000000000000000001"));
     const STORAGE_KEY: H256 =

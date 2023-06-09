@@ -39,7 +39,7 @@ impl<DB: Database> Stage<DB> for IndexLogHistoryStage {
         let (range, is_final_range) = input.next_block_range_with_threshold(self.commit_threshold);
 
         if range.is_empty() {
-            return Ok(ExecOutput::done(*range.start()))
+            return Ok(ExecOutput::done(input.checkpoint()))
         }
 
         let mut stage_checkpoint = stage_checkpoint(tx, input.checkpoint(), &range)?;

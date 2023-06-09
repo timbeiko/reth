@@ -1330,7 +1330,7 @@ mod tests {
         block2a.hash = block2a_hash;
 
         // reinsert two blocks that point to canonical chain
-        assert_eq!(tree.insert_block(block1a.clone()).unwrap(), BlockStatus::Accepted);
+        assert_eq!(tree.insert_block(block1a.clone()).unwrap(), BlockStatus::Valid);
 
         TreeTester::default()
             .with_chain_num(1)
@@ -1342,7 +1342,7 @@ mod tests {
             .with_pending_blocks((block2.number + 1, HashSet::from([])))
             .assert(&tree);
 
-        assert_eq!(tree.insert_block(block2a.clone()).unwrap(), BlockStatus::Accepted);
+        assert_eq!(tree.insert_block(block2a.clone()).unwrap(), BlockStatus::Valid);
         // Trie state:
         // b2   b2a (side chain)
         // |   /

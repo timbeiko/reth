@@ -52,7 +52,7 @@ impl<DB: Database> Stage<DB> for IndexStorageHistoryStage {
 
         let mut stage_checkpoint = stage_checkpoint(tx, input.checkpoint(), &range)?;
 
-        let indices = tx.get_storage_transition_ids_from_changeset(range.clone())?;
+        let indices = tx.get_storage_block_numbers_from_changesets(range.clone())?;
         let changesets = indices.values().map(|blocks| blocks.len() as u64).sum::<u64>();
 
         tx.insert_storage_history_index(indices)?;

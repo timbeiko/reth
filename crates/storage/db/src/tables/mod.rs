@@ -49,7 +49,7 @@ pub enum TableType {
 }
 
 /// Number of tables that should be present inside database.
-pub const NUM_TABLES: usize = 25;
+pub const NUM_TABLES: usize = 27;
 
 /// Default tables that should be present inside database.
 pub const TABLES: [(TableType, &str); NUM_TABLES] = [
@@ -76,6 +76,8 @@ pub const TABLES: [(TableType, &str); NUM_TABLES] = [
     (TableType::Table, AccountsTrie::const_name()),
     (TableType::DupSort, StoragesTrie::const_name()),
     (TableType::Table, TxSenders::const_name()),
+    (TableType::Table, LogAddressHistory::const_name()),
+    (TableType::Table, LogTopicHistory::const_name()),
     (TableType::Table, SyncStage::const_name()),
     (TableType::Table, SyncStageProgress::const_name()),
 ];
@@ -250,6 +252,16 @@ table!(
     ///
     /// Code example can be found in `reth_provider::HistoricalStateProviderRef`
     ( StorageHistory ) StorageShardedKey | BlockNumberList
+);
+
+table!(
+    /// TODO:
+    ( LogAddressHistory ) ShardedKey<Address> | BlockNumberList
+);
+
+table!(
+    /// TODO:
+    ( LogTopicHistory ) ShardedKey<H256> | BlockNumberList
 );
 
 dupsort!(

@@ -1,6 +1,6 @@
 //! Executor Factory
 
-use crate::{post_state::PostState, StateProvider};
+use crate::{post_state::PostState, StateChange, StateProvider};
 use reth_interfaces::executor::BlockExecutionError;
 use reth_primitives::{Address, Block, ChainSpec, U256};
 
@@ -53,7 +53,7 @@ pub trait BlockExecutor<SP: StateProvider> {
 
     /// TEMPORARY return post state after execution multiple blocks.
     /// Idea is to hide multi block execution.
-    fn return_post_state(&mut self) -> PostState {
-        PostState::default()
+    fn take_state_change(&mut self) -> StateChange {
+        StateChange::default()
     }
 }

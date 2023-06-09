@@ -5202,6 +5202,7 @@ version = "0.1.0"
 dependencies = [
  "once_cell",
  "reth-consensus-common",
+ "reth-db",
  "reth-interfaces",
  "reth-primitives",
  "reth-provider",

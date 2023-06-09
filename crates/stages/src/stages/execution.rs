@@ -68,6 +68,7 @@ pub struct ExecutionStage<EF: ExecutorFactory> {
 impl<EF: ExecutorFactory> ExecutionStage<EF> {
     /// Create new execution stage with specified config.
     pub fn new(executor_factory: EF, thresholds: ExecutionStageThresholds) -> Self {
+        trace!(target: "sync::stages::execution", max_blocks= thresholds.max_blocks, " Max blocks");
         Self { metrics: ExecutionStageMetrics::default(), executor_factory, thresholds }
     }
 
@@ -137,13 +138,15 @@ impl<EF: ExecutorFactory> ExecutionStage<EF> {
         let max_block = input.previous_stage_checkpoint().block_number;
 
         // Build executor
-        let mut executor = self.executor_factory.with_sp(LatestStateProviderRef::new(&**tx));
+        let mut executor =
+            self.executor_factory.revm_state_with_sp(LatestStateProviderRef::new(&**tx)).unwrap();
 
         // Progress tracking
         let mut stage_progress = start_block;
 
         // Execute block range
         //let mut state = PostState::default();
+        debug!(target: "sync::stages::execution", start = start_block, end = max_block, "Executing range");
         for block_number in start_block..=max_block {
             let (block, td) = Self::read_block_with_senders(tx, block_number)?;
 
@@ -174,19 +177,18 @@ impl<EF: ExecutorFactory> ExecutionStage<EF> {
             // }
 
             // Check if we should commit now
-            if self.thresholds.is_end_of_batch(block_number - start_block, 0)
-            //, state.size_hint() as u64)
-            {
-                break
+            if self.thresholds.is_end_of_batch(block_number - start_block, 0) {
+                break;
             }
         }
-        let state = executor.return_post_state();
+        let state = executor.take_state_change();
+        //let receipts = executor.take_receipts();
 
-        // Write remaining changes
-        trace!(target: "sync::stages::execution", accounts = state.accounts().len(), "Writing updated state to database");
         let start = Instant::now();
         state.write_to_db(&**tx)?;
-        trace!(target: "sync::stages::execution", took = ?start.elapsed(), "Wrote state");
+        info!(target: "sync::stages::execution", took = ?start.elapsed(), "Wrote state");
+
+        // TODO write receipts
 
         let is_final_range = stage_progress == max_block;
         info!(target: "sync::stages::execution", stage_progress, is_final_range, "Stage iteration finished");
@@ -249,7 +251,7 @@ impl<EF: ExecutorFactory, DB: Database> Stage<DB> for ExecutionStage<EF> {
             input.unwind_block_range_with_threshold(self.thresholds.max_blocks.unwrap_or(u64::MAX));
 
         if range.is_empty() {
-            return Ok(UnwindOutput { checkpoint: StageCheckpoint::new(input.unwind_to) })
+            return Ok(UnwindOutput { checkpoint: StageCheckpoint::new(input.unwind_to) });
         }
 
         // get all batches for account change
@@ -290,7 +292,7 @@ impl<EF: ExecutorFactory, DB: Database> Stage<DB> for ExecutionStage<EF> {
         let mut rev_acc_changeset_walker = account_changeset.walk_back(None)?;
         while let Some((block_num, _)) = rev_acc_changeset_walker.next().transpose()? {
             if block_num <= unwind_to {
-                break
+                break;
             }
             // delete all changesets
             rev_acc_changeset_walker.delete_current()?;
@@ -299,7 +301,7 @@ impl<EF: ExecutorFactory, DB: Database> Stage<DB> for ExecutionStage<EF> {
         let mut rev_storage_changeset_walker = storage_changeset.walk_back(None)?;
         while let Some((key, _)) = rev_storage_changeset_walker.next().transpose()? {
             if key.block_number() < *range.start() {
-                break
+                break;
             }
             // delete all changesets
             rev_storage_changeset_walker.delete_current()?;
@@ -325,7 +327,7 @@ impl<EF: ExecutorFactory, DB: Database> Stage<DB> for ExecutionStage<EF> {
 ///
 /// A third threshold, `max_changesets`, can be set to periodically write changesets to the
 /// current database transaction, which frees up memory.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExecutionStageThresholds {
     /// The maximum number of blocks to process before the execution stage commits.
     pub max_blocks: Option<u64>,
@@ -353,8 +355,8 @@ impl ExecutionStageThresholds {
     /// Check if the batch thresholds have been hit.
     #[inline]
     pub fn is_end_of_batch(&self, blocks_processed: u64, changes_processed: u64) -> bool {
-        blocks_processed >= self.max_blocks.unwrap_or(u64::MAX) ||
-            changes_processed >= self.max_changes.unwrap_or(u64::MAX)
+        blocks_processed >= self.max_blocks.unwrap_or(u64::MAX)
+            || changes_processed >= self.max_changes.unwrap_or(u64::MAX)
     }
 
     /// Check if the history write threshold has been hit.

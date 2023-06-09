@@ -14,6 +14,7 @@ reth-provider = { path = "../storage/provider" }
 reth-revm-primitives = { path = "./revm-primitives" }
 reth-revm-inspectors = { path = "./revm-inspectors" }
 reth-consensus-common = { path = "../consensus/common" }
+reth-db = { path = "../storage/db" }
 
 # revm
 revm = { version = "3" }

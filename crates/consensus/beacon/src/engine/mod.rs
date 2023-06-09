@@ -779,9 +779,7 @@ where
         let block_hash = block.hash();
 
         // now check the block itself
-        if let Some(status) = self.check_invalid_ancestor(block.parent_hash) {
-            // The parent is invalid, so this block is also invalid
-            self.invalid_headers.insert(block.header);
+        if let Some(status) = self.check_invalid_ancestor_with_head(block.parent_hash, block_hash) {
             return Ok(status)
         }
 

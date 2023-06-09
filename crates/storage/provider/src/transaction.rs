@@ -14,7 +14,7 @@ use reth_db::{
     },
     table::Table,
     tables,
-    transaction::{DbTx, DbTxMut, DbTxMutGAT},
+    transaction::{DbTx, DbTxMut},
     BlockNumberList,
 };
 use reth_interfaces::{db::DatabaseError as DbError, provider::ProviderError};
@@ -620,7 +620,7 @@ where
 
         // log history stage
         {
-            let (log_address_indices, log_topic_indices) =
+            let (log_address_indices, log_topic_indices, _) =
                 self.get_log_addresses_and_topics(range)?;
             self.insert_log_address_history_index(log_address_indices)?;
             self.insert_log_topic_history_index(log_topic_indices)?;
@@ -1317,15 +1317,23 @@ where
 
     /// Get the mappings of log address and log topic to block numbers where they occurred.
     /// This function walks over the receipts and constructs corresponding mappings for log fields.
+    ///
+    /// # Returns
+    ///
+    /// * Mapping of log address to block numbers where they occurred.
+    /// * Mapping of log topic to block numbers where they occurred.
+    /// * Number of receipts walked.
     pub fn get_log_addresses_and_topics(
         &self,
         range: RangeInclusive<BlockNumber>,
-    ) -> Result<(BTreeMap<Address, Vec<u64>>, BTreeMap<H256, Vec<u64>>), TransactionError> {
+    ) -> Result<(BTreeMap<Address, Vec<u64>>, BTreeMap<H256, Vec<u64>>, u64), TransactionError>
+    {
         let mut block_indices_cursor = self.cursor_read::<tables::BlockBodyIndices>()?;
         let mut receipts_cursor = self.cursor_read::<tables::Receipts>()?;
 
         let mut log_addresses: BTreeMap<Address, Vec<u64>> = BTreeMap::new();
         let mut log_topics: BTreeMap<H256, Vec<u64>> = BTreeMap::new();
+        let mut num_of_receipts = 0;
         for block_entry in block_indices_cursor.walk_range(range)? {
             let (block_number, block_indices) = block_entry?;
 
@@ -1347,9 +1355,10 @@ where
             for log_topic in block_log_topics {
                 log_topics.entry(log_topic).or_default().push(block_number);
             }
+            num_of_receipts += block_indices.tx_count();
         }
 
-        Ok((log_addresses, log_topics))
+        Ok((log_addresses, log_topics, num_of_receipts))
     }
 
     /// Insert storage change index to database. Used inside StorageHistoryIndex stage

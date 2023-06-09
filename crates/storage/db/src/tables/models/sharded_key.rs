@@ -26,7 +26,7 @@ pub struct ShardedKey<T> {
 
 impl<T> AsRef<ShardedKey<T>> for ShardedKey<T> {
     fn as_ref(&self) -> &ShardedKey<T> {
-        &self
+        self
     }
 }
 

@@ -214,7 +214,7 @@ table!(
     /// Stores pointers to block changeset with changes for each account key.
     ///
     /// Last shard key of the storage will contain `u64::MAX` `BlockNumber`,
-    /// this would allows us small optimization on db access when change is in plain state.
+    /// this allows small optimization on db access when change is in plain state.
     ///
     /// Imagine having shards as:
     /// * `Address | 100`
@@ -236,7 +236,7 @@ table!(
     /// Stores pointers to block number changeset with changes for each storage key.
     ///
     /// Last shard key of the storage will contain `u64::MAX` `BlockNumber`,
-    /// this would allows us small optimization on db access when change is in plain state.
+    /// this allows small optimization on db access when change is in plain state.
     ///
     /// Imagine having shards as:
     /// * `Address | StorageKey | 100`
@@ -255,12 +255,22 @@ table!(
 );
 
 table!(
-    /// TODO:
+    /// Storages pointers to block numbers at which the particular address emitted the log.
+    ///
+    /// Last shard key will contain `u64::MAX` `BlockNumber`,
+    /// this allows small optimization on searching the last shard for a given address.
+    ///
+    /// The index allows us to only walk the blocks that contain logs emitted by a given address.
     ( LogAddressHistory ) ShardedKey<Address> | BlockNumberList
 );
 
 table!(
-    /// TODO:
+    /// Storages pointers to block numbers at which logs with particular topics occurred.
+    ///
+    /// Last shard key will contain `u64::MAX` `BlockNumber`,
+    /// this allows small optimization on searching the last shard for a given topic.
+    ///
+    /// The index allows us to only walk the blocks which contain logs with given topics.
     ( LogTopicHistory ) ShardedKey<H256> | BlockNumberList
 );
 

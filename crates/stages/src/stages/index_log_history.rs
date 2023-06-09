@@ -6,7 +6,11 @@ use tracing::info;
 
 /// The log indexing stage.
 ///
-/// TODO:
+/// This stage walks over all available receipts and inserts the index of block numbers where
+/// particular log addresses and topics occurred.
+///
+/// For more information see [reth_db::tables::LogAddressHistory] and
+/// [reth_db::tables::LogTopicHistory].
 #[derive(Debug, Clone)]
 pub struct IndexLogHistoryStage {
     commit_threshold: u64,

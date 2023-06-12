@@ -262,7 +262,7 @@ impl TestTransaction {
             let mut next_tx_num = tx_offset.unwrap_or_default();
 
             receipts.into_iter().try_for_each(|receipt| {
-                tx.put::<tables::Receipts>(next_tx_num, receipt.clone().into())?;
+                tx.put::<tables::Receipts>(next_tx_num, receipt.clone())?;
                 next_tx_num += 1;
                 Ok(())
             })

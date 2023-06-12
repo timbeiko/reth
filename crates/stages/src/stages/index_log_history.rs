@@ -22,6 +22,12 @@ pub struct IndexLogHistoryStage {
     commit_threshold: u64,
 }
 
+impl Default for IndexLogHistoryStage {
+    fn default() -> Self {
+        Self { commit_threshold: 100_000 }
+    }
+}
+
 #[async_trait::async_trait]
 impl<DB: Database> Stage<DB> for IndexLogHistoryStage {
     /// Return the id of the stage

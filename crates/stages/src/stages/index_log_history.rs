@@ -132,7 +132,7 @@ mod tests {
     use super::*;
     use crate::test_utils::{
         stage_test_suite_ext, ExecuteStageTestRunner, StageTestRunner, TestRunnerError,
-        TestTransaction, UnwindStageTestRunner, PREV_STAGE_ID,
+        TestTransaction, UnwindStageTestRunner,
     };
     use assert_matches::assert_matches;
     use reth_db::models::ShardedKey;
@@ -147,10 +147,10 @@ mod tests {
         let threshold = 50;
         let mut runner = IndexLogHistoryTestRunner::default();
         runner.set_threshold(threshold);
-        let (stage_progress, previous_stage) = (1000, 1100); // input exceeds threshold
+        let (stage_progress, target) = (1000, 1100); // input exceeds threshold
 
         let first_input = ExecInput {
-            previous_stage: Some((PREV_STAGE_ID, previous_stage)),
+            target: Some(target),
             checkpoint: Some(StageCheckpoint::new(stage_progress)),
         };
         let (seed_blocks, seed_receipts) =
@@ -183,7 +183,7 @@ mod tests {
 
         // Execute second time to completion
         let second_input = ExecInput {
-            previous_stage: Some((PREV_STAGE_ID, previous_stage)),
+            target: Some(target),
             checkpoint: Some(StageCheckpoint::new(expected_progress)),
         };
         let result = runner.execute(second_input).await.unwrap();
@@ -191,16 +191,15 @@ mod tests {
         assert_eq!(
             result.as_ref().unwrap(),
             &ExecOutput {
-                checkpoint: StageCheckpoint::new(previous_stage)
-                    .with_index_history_stage_checkpoint(IndexHistoryCheckpoint {
-                        block_range: CheckpointBlockRange::from(
-                            expected_progress + 1..=previous_stage
-                        ),
+                checkpoint: StageCheckpoint::new(target).with_index_history_stage_checkpoint(
+                    IndexHistoryCheckpoint {
+                        block_range: CheckpointBlockRange::from(expected_progress + 1..=target),
                         progress: EntitiesCheckpoint {
                             processed: total_receipts,
                             total: total_receipts
                         }
-                    }),
+                    }
+                ),
                 done: true
             }
         );
@@ -262,7 +261,7 @@ mod tests {
 
         fn seed_execution(&mut self, input: ExecInput) -> Result<Self::Seed, TestRunnerError> {
             let stage_progress = input.checkpoint().block_number;
-            let end = input.previous_stage_checkpoint_block_number();
+            let end = input.target();
 
             let tx_offset = None;
 

@@ -1379,10 +1379,7 @@ where
         &self,
         account_transitions: BTreeMap<Address, Vec<u64>>,
     ) -> Result<(), TransactionError> {
-        self.insert_history_index::<_, tables::AccountHistory>(
-            account_transitions,
-            |address, highest_block_number| ShardedKey::new(address, highest_block_number),
-        )
+        self.insert_history_index::<_, tables::AccountHistory>(account_transitions, ShardedKey::new)
     }
 
     /// Insert log address index into the database. Used inside LogHistoryIndex stage.
@@ -1392,7 +1389,7 @@ where
     ) -> Result<(), TransactionError> {
         self.insert_history_index::<_, tables::LogAddressHistory>(
             log_address_occurrences,
-            |address, highest_block_number| ShardedKey::new(address, highest_block_number),
+            ShardedKey::new,
         )
     }
 
@@ -1403,7 +1400,7 @@ where
     ) -> Result<(), TransactionError> {
         self.insert_history_index::<_, tables::LogTopicHistory>(
             log_topic_occurrences,
-            |topic, highest_block_number| ShardedKey::new(topic, highest_block_number),
+            ShardedKey::new,
         )
     }
 

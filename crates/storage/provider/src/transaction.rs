@@ -21,9 +21,9 @@ use reth_interfaces::{db::DatabaseError as DbError, provider::ProviderError};
 use reth_primitives::{
     keccak256,
     stage::{StageCheckpoint, StageId},
-    Account, Address, BlockHash, BlockNumber, ChainSpec, Hardfork, Header, SealedBlock,
-    SealedBlockWithSenders, SealedHeader, StorageEntry, TransactionSigned,
-    TransactionSignedEcRecovered, H256, U256,
+    Account, Address, BlockHash, BlockNumber, ChainSpec, Hardfork, Header, LogAddressIndices,
+    LogTopicIndices, SealedBlock, SealedBlockWithSenders, SealedHeader, StorageEntry,
+    TransactionSigned, TransactionSignedEcRecovered, H256, U256,
 };
 use reth_trie::{StateRoot, StateRootError};
 use std::{
@@ -487,24 +487,16 @@ where
         // unwinding
         let mut receipts_cursor = self.cursor_read::<tables::Receipts>()?;
         for (block_number, block_indices) in block_indices.into_iter().rev() {
-            // Aggregate all addresses and topics from logs
-            let mut block_log_addresses = BTreeSet::new();
-            let mut block_log_topics = BTreeSet::new();
+            // Overwrite any log addresses and topics observed in this block with now lowest block
+            // number
             for receipt_entry in receipts_cursor.walk_range(block_indices.tx_num_range())? {
                 let (_, receipt) = receipt_entry?;
                 for log in receipt.logs {
-                    block_log_addresses.insert(log.address);
-                    block_log_topics.extend(log.topics.iter());
+                    log_addresses.insert(log.address, block_number);
+                    for topic in log.topics {
+                        log_topics.insert(topic, block_number);
+                    }
                 }
-            }
-
-            // Overwrite any log addresses and topics observed in this block with now lowest block
-            // number
-            for log_address in block_log_addresses {
-                log_addresses.insert(log_address, block_number);
-            }
-            for log_topic in block_log_topics {
-                log_topics.insert(log_topic, block_number);
             }
         }
 
@@ -1326,8 +1318,7 @@ where
     pub fn get_log_addresses_and_topics(
         &self,
         range: RangeInclusive<BlockNumber>,
-    ) -> Result<(BTreeMap<Address, Vec<u64>>, BTreeMap<H256, Vec<u64>>, u64), TransactionError>
-    {
+    ) -> Result<(LogAddressIndices, LogTopicIndices, u64), TransactionError> {
         let mut block_indices_cursor = self.cursor_read::<tables::BlockBodyIndices>()?;
         let mut receipts_cursor = self.cursor_read::<tables::Receipts>()?;
 
